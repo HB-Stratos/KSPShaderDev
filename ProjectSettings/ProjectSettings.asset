@@ -661,10 +661,10 @@ PlayerSettings:
     m_VersionCode: 1
     m_VersionName: 
   apiCompatibilityLevel: 6
-  cloudProjectId: 54a138cc-5e2d-46fd-ab27-07a2cec164ef
+  cloudProjectId: 
   framebufferDepthMemorylessMode: 0
-  projectName: KSPShaderDev
-  organizationId: hb_stratos
+  projectName: 
+  organizationId: 
   cloudEnabled: 0
   enableNativePlatformBackendsForNewInputSystem: 0
   disableOldInputManagerSupport: 0
