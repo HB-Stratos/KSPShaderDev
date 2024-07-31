@@ -275,7 +275,6 @@ GameObject:
   - component: {fileID: 857189373}
   - component: {fileID: 857189372}
   - component: {fileID: 857189375}
-  - component: {fileID: 857189376}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -407,23 +406,7 @@ MonoBehaviour:
   breakBeforeColorGrading: 0
   m_BeforeTransparentBundles: []
   m_BeforeStackBundles: []
-  m_AfterStackBundles:
-  - assemblyQualifiedName: Grayscale, Assembly-CSharp, Version=0.0.0.0, Culture=neutral,
-      PublicKeyToken=null
-  - assemblyQualifiedName: Heatblur, Assembly-CSharp, Version=0.0.0.0, Culture=neutral,
-      PublicKeyToken=null
---- !u!114 &857189376
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 857189371}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6c30c27565714134b93119e85eca3c2a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_AfterStackBundles: []
 --- !u!1 &1620895215
 GameObject:
   m_ObjectHideFlags: 0
