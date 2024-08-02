@@ -440,8 +440,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   dofShader: {fileID: 4800000, guid: b3889feb0f558e74bb013081ea11ff4b, type: 3}
-  focusDistance: 3.39
-  focusRange: 2.62
+  focusDistance: 10
+  focusRange: 4.18
   bokehRadius: 4
 --- !u!1 &1203471430
 GameObject:
@@ -1009,7 +1009,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 5a26de236ce89e94b963be8fa2b7ade6, type: 2}
+  - {fileID: 2100000, guid: f794c8451763f354c84ed1f9b0ea15a5, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
