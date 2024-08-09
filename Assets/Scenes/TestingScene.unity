@@ -356,7 +356,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 857189371}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 948f4100a11a5c24981795d21301da5c, type: 3}
   m_Name: 
@@ -408,7 +408,9 @@ MonoBehaviour:
   breakBeforeColorGrading: 0
   m_BeforeTransparentBundles: []
   m_BeforeStackBundles: []
-  m_AfterStackBundles: []
+  m_AfterStackBundles:
+  - assemblyQualifiedName: Grayscale, Assembly-CSharp, Version=0.0.0.0, Culture=neutral,
+      PublicKeyToken=null
 --- !u!114 &857189376
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -434,14 +436,14 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 857189371}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 41bf576ca261ffb4b9d284fbe4aba5c1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   dofShader: {fileID: 4800000, guid: b3889feb0f558e74bb013081ea11ff4b, type: 3}
   focusDistance: 10
-  focusRange: 4.18
+  focusRange: 10
   bokehRadius: 4
 --- !u!1 &1203471430
 GameObject:
