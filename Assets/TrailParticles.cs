@@ -94,8 +94,8 @@ public class TrailParticles : MonoBehaviour
 
     private void SetUpMeshArrays()
     {
-        trailVertices = new Vector3[quadTrailBufferSize * 2 + 2];
-        trailTriangles = new int[quadTrailBufferSize * 6]; //consider making this a gpu vertex strip at some point
+        trailVertices = new Vector3[quadTrailBufferSize * 3 + 3];
+        trailTriangles = new int[quadTrailBufferSize * 6 * 2]; //consider making this a gpu vertex strip at some point
     }
 
     private void SpawnNewParticleIfNeeded()
@@ -150,21 +150,22 @@ public class TrailParticles : MonoBehaviour
     private void UpdateTrailMesh()
     {
         Vector3 cameraPosition = Camera.main.transform.position;
-        int[] triangleOrder = new int[] { 0, 1, 2, 1, 3, 2 };
+        int[] triangleOrder = new int[] { 0, 1, 3, 1, 4, 3, 1, 2, 4, 2, 5, 4 };
         for (int i = 0; i < particles.Count; i++)
         {
             Vector3 vectorToCamera = particles[i].position - cameraPosition;
             Vector3 sideVector = Vector3.Cross(vectorToCamera, particles[i].velocity).normalized;
 
-            trailVertices[2 * i + 0] = 0.5f * trailWidth * sideVector + particles[i].position;
-            trailVertices[2 * i + 1] = 0.5f * trailWidth * -sideVector + particles[i].position;
+            trailVertices[3 * i + 0] = 0.5f * trailWidth * sideVector + particles[i].position;
+            trailVertices[3 * i + 1] = particles[i].position;
+            trailVertices[3 * i + 2] = 0.5f * trailWidth * -sideVector + particles[i].position;
 
             if (i == 0)
                 continue;
 
-            for (int j = 0; j < 6; j++)
+            for (int j = 0; j < 12; j++)
             {
-                trailTriangles[(i - 1) * 6 + j] = triangleOrder[j] + 2 * (i - 1);
+                trailTriangles[(i - 1) * 12 + j] = triangleOrder[j] + 3 * (i - 1);
             }
         }
 
