@@ -150,7 +150,7 @@ public class TrailParticles : MonoBehaviour
     private void UpdateTrailMesh()
     {
         Vector3 cameraPosition = Camera.main.transform.position;
-        int[] triangleOrder = new int[] { 0, 1, 3, 1, 4, 3, 1, 2, 4, 2, 5, 4 };
+        int[] triangleOrder = new int[] { 0, 4, 3, 0, 1, 4, 1, 2, 4, 2, 5, 4 };
         for (int i = 0; i < particles.Count; i++)
         {
             Vector3 vectorToCamera = particles[i].position - cameraPosition;
