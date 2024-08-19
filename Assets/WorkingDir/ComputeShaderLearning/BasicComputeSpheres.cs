@@ -4,48 +4,67 @@ using UnityEngine;
 
 public class BasicComputeSpheres : MonoBehaviour
 {
-    public int SphereAmount = 17;
-    public ComputeShader Shader;
-    public GameObject Prefab;
+    public int sphereAmount = 17;
+    public ComputeShader shader;
 
-    ComputeBuffer resultBuffer;
+    public Mesh mesh;
+    public Material material;
+
+    ComputeBuffer sphereLocations;
     int kernel;
     uint threadGroupSize;
-    Vector3[] output;
+    Bounds bounds;
+    int threadGroups;
 
-    Transform[] instances;
+    ComputeBuffer meshTriangles;
+    ComputeBuffer meshVertexPositions;
 
     // Start is called before the first frame update
     void Start()
     {
-        kernel = Shader.FindKernel("Spheres");
-        Shader.GetKernelThreadGroupSizes(kernel, out threadGroupSize, out _, out _);
+        kernel = shader.FindKernel("Spheres");
+        shader.GetKernelThreadGroupSizes(kernel, out threadGroupSize, out _, out _);
 
-        resultBuffer = new ComputeBuffer(SphereAmount, sizeof(float) * 3);
-        output = new Vector3[SphereAmount];
+        threadGroups = (int)((sphereAmount + (threadGroupSize - 1)) / threadGroupSize);
 
-        instances = new Transform[SphereAmount];
-        for (int i = 0; i < SphereAmount; i++)
-        {
-            instances[i] = Instantiate(Prefab, transform).transform;
-        }
+        sphereLocations = new ComputeBuffer(sphereAmount, sizeof(float) * 3);
+
+        int[] inputMeshTriangles = mesh.triangles;
+        meshTriangles = new ComputeBuffer(inputMeshTriangles.Length, sizeof(int));
+        meshTriangles.SetData(inputMeshTriangles);
+
+        Vector3[] inputMeshVertexPositions = mesh.vertices;
+        meshVertexPositions = new ComputeBuffer(inputMeshVertexPositions.Length, sizeof(float) * 3);
+        meshVertexPositions.SetData(inputMeshVertexPositions);
+
+        shader.SetBuffer(kernel, "SphereLocations", sphereLocations);
+
+        material.SetBuffer("SphereLocations", sphereLocations);
+        material.SetBuffer("MeshTriangles", meshTriangles);
+        material.SetBuffer("MeshVertexPositions", meshVertexPositions);
+
+        bounds = new Bounds(Vector3.zero, Vector3.one * 20);
     }
 
     // Update is called once per frame
     void Update()
     {
-        Shader.SetBuffer(kernel, "Result", resultBuffer);
-        Shader.SetFloat("Time", Time.time);
-        int threadGroups = (int)((SphereAmount + (threadGroupSize - 1)) / threadGroupSize);
-        Shader.Dispatch(kernel, threadGroups, 1, 1);
-        resultBuffer.GetData(output);
+        shader.SetFloat("Time", Time.time);
+        shader.Dispatch(kernel, threadGroups, 1, 1);
 
-        for (int i = 0; i < instances.Length; i++)
-            instances[i].localPosition = output[i];
+        Graphics.DrawProcedural(
+            material,
+            bounds,
+            MeshTopology.Triangles,
+            meshTriangles.count,
+            sphereAmount
+        );
     }
 
     void OnDestroy()
     {
-        resultBuffer.Dispose();
+        sphereLocations.Dispose();
+        meshTriangles.Dispose();
+        meshVertexPositions.Dispose();
     }
 }

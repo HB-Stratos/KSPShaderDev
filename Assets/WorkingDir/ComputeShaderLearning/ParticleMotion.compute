@@ -5,7 +5,7 @@
 
 // Create a RenderTexture with enableRandomWrite flag and set it
 // with cs.SetTexture
-RWStructuredBuffer<float3> Result;
+RWStructuredBuffer<float3> SphereLocations;
 uniform float Time;
 
 [numthreads(64, 1, 1)]
@@ -18,5 +18,5 @@ void Spheres(uint3 id : SV_DispatchThreadID)
 
     float3 dir = baseDir * sin(scaledTime + orthogonal * cos(scaledTime));
 
-    Result[id.x] = dir * 20;
+    SphereLocations[id.x] = dir * 20;
 }
