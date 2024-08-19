@@ -74,7 +74,7 @@ public class TrailParticles : MonoBehaviour
         SetUpMeshArrays();
     }
 
-    void Update()
+    void FixedUpdate()
     {
         SpawnNewParticleIfNeeded();
         HandleParticleMovement();
