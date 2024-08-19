@@ -491,7 +491,7 @@ GameObject:
   - component: {fileID: 1075575166}
   - component: {fileID: 1075575164}
   m_Layer: 0
-  m_Name: Trail Renderer
+  m_Name: Compute Holder
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -506,27 +506,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 1075575163}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 52b767d4b414bd347969ea8d815f4369, type: 3}
+  m_Script: {fileID: 11500000, guid: 1885c07e208a92e4e8b092756997c535, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  shader: {fileID: 0}
-  maxDistanceBeforeNewParticle: 1
-  minDistanceBetweenParticles: 0.5
-  emitterPositionOffset: {x: 0, y: 0, z: 0}
-  emitterRotationOffset: {x: 0, y: 0, z: 0}
-  debugParticles: 1
-  drawParticles: 1
-  emissionVelocity: 5
-  lifetime: 30
-  drawConnectingTrail: 1
-  trailWidth: 1
-  quadTrailBufferSize: 100
-  hasPhysics: 1
-  inheritEmitterVelocity: 1
-  hasCollision: 1
-  density: 1.225
-  dragCoefficient: 0.5
-  gravity: 9.81
+  SphereAmount: 17
+  Shader: {fileID: 7200000, guid: 3e7877e4981699a40b5070a6e2160616, type: 3}
+  Prefab: {fileID: 4487554228280427544, guid: 84b9f9453150896448f57c4ee6880e2d, type: 3}
 --- !u!4 &1075575165
 Transform:
   m_ObjectHideFlags: 0
