@@ -4,6 +4,17 @@ using System.Linq;
 using System.Reflection;
 using UnityEngine;
 
+/*
+so let me think this through
+- We have a ParticleManager thing. It is given or acquires a list of all particle compute shaders.
+ - for each compute shader, it has to figure out how big the Particle struct is, and how many particles the user requested.
+ - then has to allocate a buffer of that size and dispatch all compute shaders asynchronously. (consider making buffers immutable as the cpu will never touch them again)
+ - on Update() a whole bunch of graphics.DrawProcedural() is dispatched to draw all the particles (consider batching by having all compute shaders write their geometry to the same buffer for a single vertex shader) (consider having two buffers, one for solid geometry and one for transparent geometry that possibly requires sorting)
+- every compute shader has exactly one kernel, which no user has to write, because it is defined in an include file. This kernel handles creating the particle structs when needed or fetches it from the buffer to pass into the update function. the update function is only allowed to operate on member variables of the particle struct.
+
+I think this might work, if I can figure out how to do all this reflection stuff, probably save that to a meta file and load it at runtime because that reflection can only be done in the editor.
+*/
+
 public class GpuParticleSystem : MonoBehaviour
 {
     [Header("Particle System Variables")]
@@ -36,14 +47,6 @@ public class GpuParticleSystem : MonoBehaviour
     ComputeBuffer particleVertexPositions;
 
     int particleUpdateKernel;
-
-    private List<ComputeBuffer> GetAllComputeBuffers()
-    {
-        var computeBufferFields = this.GetType()
-            .GetFields(BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Public)
-            .Where(p => p.FieldType == typeof(ComputeBuffer));
-        return computeBufferFields.Select(p => (ComputeBuffer)p.GetValue(this)).ToList();
-    }
 
     // Start is called before the first frame update
     void Start()
@@ -100,6 +103,14 @@ public class GpuParticleSystem : MonoBehaviour
             particleTriangles.count,
             maxParticleCount
         );
+    }
+
+    private List<ComputeBuffer> GetAllComputeBuffers()
+    {
+        var computeBufferFields = this.GetType()
+            .GetFields(BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Public)
+            .Where(p => p.FieldType == typeof(ComputeBuffer));
+        return computeBufferFields.Select(p => (ComputeBuffer)p.GetValue(this)).ToList();
     }
 
     void OnDestroy()
