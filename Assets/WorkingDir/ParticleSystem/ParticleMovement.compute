@@ -1,0 +1,14 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel UpdateParticle
+
+RWStructuredBuffer<float3> _ParticlePositions;
+RWStructuredBuffer<float3> _ParticleVelocities;
+float3 _EmitVector;
+float unity_DeltaTime;
+
+
+[numthreads(64, 1, 1)]
+void UpdateParticle(uint3 id : SV_DispatchThreadID)
+{
+    _ParticlePositions[id.x] += _EmitVector * unity_DeltaTime * id.x;
+}
