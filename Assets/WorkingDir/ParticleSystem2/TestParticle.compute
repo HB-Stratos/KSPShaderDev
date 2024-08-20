@@ -1,0 +1,34 @@
+﻿#pragma kernel CSMain
+
+struct Particle
+{
+    float life;
+    float3 position;
+    float3 velocity;
+};
+//Note the trailing semicolon. Important!
+
+//TODO figure out a way to request data from the CPU dynamically
+
+// How a new particle should look. Return a Particle.
+Particle Emit()
+{
+    Particle p;
+    p.life = 10;
+    p.position = float3(0, 0, 0);
+    p.velocity = float3(0, 0, 1);
+    return p;
+}
+
+// Update is only allowed to modify data within Particle p.
+void Update(Particle p)
+{
+
+}
+
+
+[numthreads(64, 1, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+
+}
