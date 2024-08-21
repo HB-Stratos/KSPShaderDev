@@ -1,0 +1,18 @@
+{
+  "name": "com.pema99.unity-shader-parser",
+  "version": "0.3.2",
+  "displayName": "UnityShaderParser",
+  "description": "This is an example package",
+  "unity": "2019.1",
+  "unityRelease": "0b5",
+  "documentationUrl": "https://example.com/",
+  "changelogUrl": "https://example.com/changelog.html",
+  "licensesUrl": "https://github.com/pema99/UnityShaderParser/blob/master/LICENSE",
+  "dependencies": {},
+  "keywords": [],
+  "author": {
+    "name": "pema99",
+    "email": "unity@example.com",
+    "url": "https://www.unity3d.com"
+  }
+}

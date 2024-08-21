@@ -142,3 +142,5 @@ PackageBackups/
 
 # UWP builds
 /UWP/*
+/Packages/com.pema99.unity-shader-parser/UnityShaderParser/UnityShaderParser.Tests~
+/Packages/com.pema99.unity-shader-parser/UnityShaderParser/UnityShaderParser.Experiments~
