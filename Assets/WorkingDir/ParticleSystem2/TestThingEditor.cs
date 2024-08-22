@@ -12,10 +12,10 @@ public class TestThingEditor : Editor
         if (GUILayout.Button("Run test code"))
         {
             var particleSystemManager = FindObjectOfType<ParticleSystemManager>();
-            particleSystemManager.TestCallShaderParser(
-                "Assets/WorkingDir/ParticleSystem2/TestParticle.compute",
-                "Particle"
-            );
+            // particleSystemManager.Start(
+            //     "Assets/WorkingDir/ParticleSystem2/TestParticle.compute",
+            //     "Particle"
+            // );
         }
     }
 }

@@ -1,16 +1,10 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text.RegularExpressions;
-using UnityEditor;
 using UnityEngine;
-using UnityShaderParser;
 using UnityShaderParser.Common;
 using UnityShaderParser.HLSL;
 using UnityShaderParser.HLSL.PreProcessor;
-using UnityShaderParser.ShaderLab;
 
 /*
 
@@ -36,35 +30,32 @@ public class ParticleSystemManager : MonoBehaviour
             "Assets/WorkingDir/ParticleSystem2/TestParticle.compute"
         };
 
-        var shaderParser = new ShaderParser();
-
-        int bufferSize = shaderParser
-            .GetHLSLShaderStructBufferSize(particleComputeShaderNames[0], "Particle")
-            .Value;
+        int bufferSize = GetShaderStructSize(particleComputeShaderNames[0], "Particle");
 
         if (bufferSize % 4 != 0)
             Debug.LogWarning("Generated buffer size is not a multiple of 4: " + bufferSize);
     }
 
-    //TODO remove this
-    public void TestCallShaderParser(string path, string nodeName)
+    protected int GetShaderStructSize(string path, string structName)
     {
-        var shaderParser = new ShaderParser();
-        string shaderFileContent = shaderParser.LoadTextFileFromPath(path);
+        string shaderFileContent = LoadTextFileFromPath(path);
         if (String.IsNullOrEmpty(shaderFileContent))
             throw new FileNotFoundException();
 
-        var tokens = HLSLLexer.Lex(shaderFileContent, null, null, false, out _);
+        var decls = ShaderParser.ParseTopLevelDeclarations(
+            shaderFileContent,
+            new HLSLParserConfig() { PreProcessorMode = PreProcessorMode.StripDirectives }
+        );
 
-        var parsed = HLSLParser
-            .ParseTopLevelDeclarations(
-                tokens,
-                new HLSLParserConfig() { PreProcessorMode = PreProcessorMode.StripDirectives },
-                out _,
-                out _
-            )
-            .First();
-        var test = shaderParser.VisitMany(new List<HLSLSyntaxNode>() { parsed });
+        var visitor = new StructSizeVisitor();
+        visitor.VisitMany(decls);
+
+        return visitor.ParticleStructSize;
+    }
+
+    protected string LoadTextFileFromPath(string path)
+    {
+        return File.Exists(path) ? File.ReadAllText(path) : null;
     }
 
     private void Update()
