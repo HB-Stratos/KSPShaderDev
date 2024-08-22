@@ -10,9 +10,12 @@ public class TestThingEditor : Editor
     public override void OnInspectorGUI()
     {
         if (GUILayout.Button("Run test code"))
-            ShaderParser.GetHLSLShaderStructBufferSize(
+        {
+            var particleSystemManager = FindObjectOfType<ParticleSystemManager>();
+            particleSystemManager.TestCallShaderParser(
                 "Assets/WorkingDir/ParticleSystem2/TestParticle.compute",
                 "Particle"
             );
+        }
     }
 }

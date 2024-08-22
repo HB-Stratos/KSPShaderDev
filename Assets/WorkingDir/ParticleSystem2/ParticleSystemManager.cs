@@ -36,12 +36,35 @@ public class ParticleSystemManager : MonoBehaviour
             "Assets/WorkingDir/ParticleSystem2/TestParticle.compute"
         };
 
-        int bufferSize = ShaderParser
+        var shaderParser = new ShaderParser();
+
+        int bufferSize = shaderParser
             .GetHLSLShaderStructBufferSize(particleComputeShaderNames[0], "Particle")
             .Value;
 
         if (bufferSize % 4 != 0)
             Debug.LogWarning("Generated buffer size is not a multiple of 4: " + bufferSize);
+    }
+
+    //TODO remove this
+    public void TestCallShaderParser(string path, string nodeName)
+    {
+        var shaderParser = new ShaderParser();
+        string shaderFileContent = shaderParser.LoadTextFileFromPath(path);
+        if (String.IsNullOrEmpty(shaderFileContent))
+            throw new FileNotFoundException();
+
+        var tokens = HLSLLexer.Lex(shaderFileContent, null, null, false, out _);
+
+        var parsed = HLSLParser
+            .ParseTopLevelDeclarations(
+                tokens,
+                new HLSLParserConfig() { PreProcessorMode = PreProcessorMode.StripDirectives },
+                out _,
+                out _
+            )
+            .First();
+        var test = shaderParser.VisitMany(new List<HLSLSyntaxNode>() { parsed });
     }
 
     private void Update()

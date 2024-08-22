@@ -9,15 +9,15 @@ using UnityShaderParser.Common;
 using UnityShaderParser.HLSL;
 using UnityShaderParser.HLSL.PreProcessor;
 
-public static class ShaderParser
+public class ShaderParser : HLSLSyntaxVisitor<string>
 {
     /// <summary>
-    ///
+    /// -
     /// </summary>
     /// <param name="path">Unity relative Path of the shader file to parse (must include file extension)</param>
     /// <param name="structName">Target struct</param>
     /// <returns>Size of target struct in bytes</returns>
-    public static int? GetHLSLShaderStructBufferSize(string path, string structName)
+    public int? GetHLSLShaderStructBufferSize(string path, string structName)
     {
         string shaderFileContent = LoadTextFileFromPath(path);
         if (String.IsNullOrEmpty(shaderFileContent))
@@ -46,12 +46,48 @@ public static class ShaderParser
         return totalByteSize;
     }
 
-    private static string LoadTextFileFromPath(string path)
+    //TODO finish this
+    public int? GetHLSLShaderStructBufferSize2(string path, string structName)
+    {
+        string shaderFileContent = LoadTextFileFromPath(path);
+        if (String.IsNullOrEmpty(shaderFileContent))
+            throw new FileNotFoundException();
+
+        var tokens = HLSLLexer.Lex(shaderFileContent, null, null, false, out _);
+
+        var parsed = HLSLParser.ParseTopLevelDeclarations(
+            tokens,
+            new HLSLParserConfig() { PreProcessorMode = PreProcessorMode.StripDirectives },
+            out _,
+            out _
+        );
+
+        var test = parsed[0];
+        return null;
+    }
+
+    #region VisitorImpl
+
+    public override string VisitScalarTypeNode(ScalarTypeNode node)
+    {
+        string enumName = PrintingUtil.GetEnumName(node.Kind);
+        Debug.Log(enumName);
+        return enumName;
+    }
+
+    #endregion
+
+    public string LoadTextFileFromPath(string path)
     {
         return File.Exists(path) ? File.ReadAllText(path) : null;
     }
 
-    private static int GetShaderVarSize(Token<UnityShaderParser.HLSL.TokenKind> token)
+    private int GetShaderVarSize(ScalarTypeNode node)
+    {
+        throw new NotImplementedException();
+    }
+
+    private int GetShaderVarSize(Token<UnityShaderParser.HLSL.TokenKind> token)
     {
         string tokenName = Enum.GetName(typeof(UnityShaderParser.HLSL.TokenKind), token.Kind)
             .Replace("Keyword", "");
@@ -81,7 +117,7 @@ public static class ShaderParser
         return baseByteSize * sizeMultiplier;
     }
 
-    private static readonly Dictionary<string, int> sizeInBytes = new Dictionary<string, int>
+    private readonly Dictionary<string, int> sizeInBytes = new Dictionary<string, int>
     {
         { "int", 32 / 8 },
         { "uint", 32 / 8 },
