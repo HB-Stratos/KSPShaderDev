@@ -3,14 +3,21 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using UnityEngine;
+using UnityShaderParser.Common;
 using UnityShaderParser.HLSL;
 using UnityShaderParser.HLSL.PreProcessor;
 
 public static class ShaderParser
 {
-    // Start is called before the first frame update
-    public static int? GetHLSLShaderStructBufferSize(string path)
+    /// <summary>
+    ///
+    /// </summary>
+    /// <param name="path">Unity relative Path of the shader file to parse (must include file extension)</param>
+    /// <param name="structName">Target struct</param>
+    /// <returns>Size of target struct in bytes</returns>
+    public static int? GetHLSLShaderStructBufferSize(string path, string structName)
     {
         string shaderFileContent = LoadTextFileFromPath(path);
         if (String.IsNullOrEmpty(shaderFileContent))
@@ -25,31 +32,62 @@ public static class ShaderParser
             out _
         );
 
-        var particleStructNode = parsed
+        int totalByteSize = parsed
             .Where(node => node.GetType() == typeof(StructDefinitionNode))
             .Where(node =>
                 node.Tokens.First(token => token.Kind == TokenKind.IdentifierToken).Identifier
-                == "Particle"
+                == structName
             )
-            .ToArray()[0];
-        var particleStructMembers = particleStructNode
+            .First()
             .Tokens.Where(token => Enum.GetName(typeof(TokenKind), token.Kind).Contains("Keyword"))
-            .ToArray();
+            .Select(token => GetShaderVarSize(token))
+            .Sum();
 
-        var test = HLSLParser.ParseExpression(
-            particleStructNode.Tokens,
-            new HLSLParserConfig(),
-            out _,
-            out _
-        );
-
-        var test2 = test.GetPrettyPrintedCode();
-
-        return null;
+        return totalByteSize;
     }
 
     private static string LoadTextFileFromPath(string path)
     {
         return File.Exists(path) ? File.ReadAllText(path) : null;
     }
+
+    private static int GetShaderVarSize(Token<UnityShaderParser.HLSL.TokenKind> token)
+    {
+        string tokenName = Enum.GetName(typeof(UnityShaderParser.HLSL.TokenKind), token.Kind)
+            .Replace("Keyword", "");
+        var dimensionRegex = new Regex(@"(?<!\d)(\d)(x\d)?");
+        int sizeMultiplier = 1;
+        var match = dimensionRegex.Match(tokenName);
+        int dimSize;
+        if (Int32.TryParse(match.Groups[1].Value, out dimSize))
+        {
+            sizeMultiplier = dimSize;
+            if (
+                !String.IsNullOrEmpty(match.Groups[2].Value)
+                && Int32.TryParse(match.Groups[2].Value.Substring(1), out dimSize)
+            ) //remove 1 to remove the leading x
+            {
+                sizeMultiplier *= dimSize;
+            }
+        }
+
+        string tokenNameNoDim = String.IsNullOrEmpty(match.Value)
+            ? tokenName
+            : tokenName.Replace(match.Value, "");
+        int baseByteSize = 0;
+        if (sizeInBytes.TryGetValue(tokenNameNoDim.ToLower(), out baseByteSize) == false)
+            Debug.LogError("No Memory size listed for type" + tokenNameNoDim);
+
+        return baseByteSize * sizeMultiplier;
+    }
+
+    private static readonly Dictionary<string, int> sizeInBytes = new Dictionary<string, int>
+    {
+        { "int", 32 / 8 },
+        { "uint", 32 / 8 },
+        { "dword", 32 / 8 },
+        { "half", 16 / 8 },
+        { "float", 32 / 8 },
+        { "double", 64 / 8 },
+    };
 }

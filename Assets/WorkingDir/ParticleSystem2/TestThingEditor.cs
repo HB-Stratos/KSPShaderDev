@@ -11,7 +11,8 @@ public class TestThingEditor : Editor
     {
         if (GUILayout.Button("Run test code"))
             ShaderParser.GetHLSLShaderStructBufferSize(
-                "Assets/WorkingDir/ParticleSystem2/TestParticle.compute"
+                "Assets/WorkingDir/ParticleSystem2/TestParticle.compute",
+                "Particle"
             );
     }
 }
