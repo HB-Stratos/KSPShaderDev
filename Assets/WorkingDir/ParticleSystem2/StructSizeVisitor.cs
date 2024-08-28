@@ -1,11 +1,14 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using UnityEditor.Experimental.GraphView;
 using UnityShaderParser.HLSL;
 
 class StructSizeVisitor : HLSLSyntaxVisitor
 {
     // Output
-    public int ParticleStructSize = 0;
+    public int ParticleStructSize { get; private set; } = 0;
+
+    public List<string> CpuSources { get; private set; } = new List<string>();
 
     // Helpers
     int GetScalarTypeSize(ScalarType scalarType)
@@ -55,6 +58,32 @@ class StructSizeVisitor : HLSLSyntaxVisitor
         else
         {
             base.VisitStructTypeNode(node);
+        }
+    }
+
+    public override void VisitVariableDeclaratorNode(VariableDeclaratorNode node)
+    {
+        if (
+            node.Annotations.Count != 0
+            && node.Annotations[0].Declarators.Count != 0
+            && node.Annotations[0].Declarators[0].Name == "CpuSource"
+            && node.Annotations[0].Declarators[0].Initializer.GetType()
+                == typeof(ValueInitializerNode)
+        )
+        {
+            ValueInitializerNode initializerNode = (ValueInitializerNode)
+                node.Annotations[0].Declarators[0].Initializer;
+            if (initializerNode.Expression.GetType() == typeof(LiteralExpressionNode))
+            {
+                LiteralExpressionNode literalExpressionNode = (LiteralExpressionNode)
+                    initializerNode.Expression;
+
+                CpuSources.Add(literalExpressionNode.Lexeme);
+            }
+        }
+        else
+        {
+            base.VisitVariableDeclaratorNode(node);
         }
     }
 }

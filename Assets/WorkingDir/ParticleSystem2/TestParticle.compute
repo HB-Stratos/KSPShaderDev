@@ -1,5 +1,12 @@
 ﻿#pragma kernel CSMain
 
+// do not make this overly high, it determines shader size
+//TODO this should really be dynamic, not user defined in source
+int maxParticles = 10000;
+
+//Only some specific values can be gathered this way, check documentation (that doesn't exist rn)
+int unity_DeltaTime < string CpuSource = "Time.deltaTime" ; > ;
+
 struct Particle
 {
     float life;
@@ -29,7 +36,7 @@ Particle Emit()
 // Update is only allowed to modify data within Particle p.
 void Update(Particle p)
 {
-
+    p.position += p.velocity * unity_DeltaTime;
 }
 
 
