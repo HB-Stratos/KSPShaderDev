@@ -35,57 +35,140 @@ Compute Shader Architecture : Artist written
 Compute Shader Architecture : Shared
 - Sort kernel is given all particle buffers that currently exist and sorts them back to front relative to camera
     - sorting may struggle with trail renderers unless I can break them into parts (possibly sort per node in trail, then render each quad after another)
+- Compute shader has to generate triangle data into a compute buffer.
+
+https://stackoverflow.com/questions/41416272/set-counter-of-append-consume-buffer-on-gpu
+Write data to an normal buffer into the position of thread ID, have a separate buffer of append type where particle is alive is pushed into with an index.
+We consume the index buffer and access the normal buffer. As we consume the index buffer we can pass the index into the update function to spawn a child particle
+Or we invert this and use the index buffer as a list of available indices we are allowed to write to
+
+https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/sm5-object-rwstructuredbuffer-incrementcounter?redirectedfrom=MSDN
+Incrementing the counter has a return value of the counter before incrementing.
+increment/decrement counter should be atomic, so every particle will for sure get a different number.
+
+A particle only lives for one frame, for a particle to persist it has to emit itself.
+
+Buffers that exist per "system", each double buffered, one "current frame", one "next frame"
+- Index buffer of currently existing particles: "current index buffer"
+- Index buffer of free spots in the particle buffer: "free index buffer"
+- Data buffer into which the index buffers link
+
+Emitting a particle
+- Happens by consuming an index from the free index buffer and writing to that index in the data buffer
+- The index that was written to is then appended to the current index buffer
+
+Particle Update
+- on update, compute shaders according to the count in the current index buffers get dispatched
+- each compute shader thread consumes one index from the current index buffer, reads it and executes its update function
+- the update function emits itself again with the same method as emitting a particle
+- the update function can emit multiple particles, parenting one to the next by temporarily storing the index that is being written to.
+
+If multiple particle effects depend on each other, this manager must figure out their order
+
 
 */
 
 public class ParticleSystemManager : MonoBehaviour
 {
     //TODO make the manager aquire all shaders automatically, for now manual asignment
-    public List<string> particleComputeShaderNames;
+    List<string> particleComputeShaderNames;
 
-    List<ComputeShader> computeShaders;
+    // struct ParticleBuffers
+    // {
+    //     ComputeShader computeShader;
+    //     ComputeBuffer renderArguments;
+    //     ComputeBuffer particleData;
+    //     ComputeBuffer vertices;
+    //     ComputeBuffer triangles;
+    //     Material material;
+
+    //     ParticleBuffers(
+    //         ComputeShader computeShader,
+    //         int maxParticleCout,
+    //         int particleDataStructSize
+    //     )
+    //     {
+    //         this.computeShader = computeShader;
+    //         this.renderArguments = new ComputeBuffer(
+    //             5,
+    //             sizeof(int),
+    //             ComputeBufferType.IndirectArguments
+    //         );
+    //         this.particleData = new ComputeBuffer(maxParticleCout, particleDataStructSize);
+    //         this.vertices =
+    //     }
+    // }
+
+    //TODO all this below here should really be a list of instances of a struct/class containing all this data. SoonTM
+    [SerializeField]
+    Material material;
+
+    [SerializeField]
+    ComputeShader computeShader;
+
+    ComputeBuffer renderArguments;
+    ComputeBuffer particleData;
+    ComputeBuffer vertices;
+    ComputeBuffer triangles;
+
+    [SerializeField]
+    [Tooltip("This is only refreshed when Start() is run")]
+    int maxParticles;
 
     private void Start()
     {
+        #region Safety Checks
+        if (!SystemInfo.supportsComputeShaders)
+            throw new NotSupportedException(
+                "The Particle system requires Compute Shader support to function"
+            );
+        #endregion
+
+        #region Temporary Setup
         //for some reason everything breaks if this is assigned outside of Start()
         particleComputeShaderNames = new List<string>()
         {
             "Assets/WorkingDir/ParticleSystem2/TestParticle.compute"
         };
+        #endregion
 
+        #region Parse Shader
         //TODO Modify this function to also grab the newly added CpuSources
-        int bufferSize = GetShaderStructSize(particleComputeShaderNames[0], "Particle");
-        if (bufferSize % 4 != 0)
-            Debug.LogWarning("Generated buffer size is not a multiple of 4: " + bufferSize);
+        int particleDataStructSize = GetShaderStructSize(particleComputeShaderNames[0], "Particle");
+        if (particleDataStructSize % 4 != 0)
+            Debug.LogWarning(
+                "Generated buffer size is not a multiple of 4: " + particleDataStructSize
+            );
 
-        int EmitKernel = computeShaders[0].FindKernel("_Emit");
-        int UpdateKernel = computeShaders[0].FindKernel("_Update");
-    }
+        //TODO this is currently bullshit code, kernels do not exist
+        int EmitKernel = computeShader.FindKernel("_Emit");
+        int UpdateKernel = computeShader.FindKernel("_Update");
+        #endregion
 
-    protected int GetShaderStructSize(string path, string structName)
-    {
-        string shaderFileContent = LoadTextFileFromPath(path);
-        if (String.IsNullOrEmpty(shaderFileContent))
-            throw new FileNotFoundException();
+        #region Set up Rendering
 
-        var decls = ShaderParser.ParseTopLevelDeclarations(
-            shaderFileContent,
-            new HLSLParserConfig() { PreProcessorMode = PreProcessorMode.StripDirectives }
-        );
+        renderArguments = new ComputeBuffer(5, sizeof(int), ComputeBufferType.IndirectArguments);
+        particleData = new ComputeBuffer(maxParticles, particleDataStructSize);
+        //TODO remove this magic number for max vertices and tris
+        vertices = new ComputeBuffer(1000, sizeof(float) * 3);
+        triangles = new ComputeBuffer(1000, sizeof(int) * 3);
 
-        var visitor = new StructSizeVisitor();
-        visitor.VisitMany(decls);
-
-        return visitor.ParticleStructSize;
-    }
-
-    protected string LoadTextFileFromPath(string path)
-    {
-        return File.Exists(path) ? File.ReadAllText(path) : null;
+        #endregion
     }
 
     private void Update()
     {
         //Dispatch vertex shader (May need to decide on general type of particle, billboard / ribbon / ribbon volume / etc)
+    }
+
+    protected int GetShaderStructSize(string path, string structName)
+    {
+        ParticleShaderAnalyzer analyzer = new ParticleShaderAnalyzer();
+        return analyzer.AnalyzeShader(path).particleStructSize;
+    }
+
+    protected string LoadTextFileFromPath(string path)
+    {
+        return File.Exists(path) ? File.ReadAllText(path) : null;
     }
 }

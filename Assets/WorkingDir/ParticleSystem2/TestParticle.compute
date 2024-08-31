@@ -1,11 +1,17 @@
 ﻿#pragma kernel CSMain
 
+RWStructuredBuffer<float3> vertices;
+RWStructuredBuffer<int> triangles;
+
+
+
 // do not make this overly high, it determines shader size
 //TODO this should really be dynamic, not user defined in source
 int maxParticles = 10000;
 
 //Only some specific values can be gathered this way, check documentation (that doesn't exist rn)
 int unity_DeltaTime < string CpuSource = "Time.deltaTime" ; > ;
+int rendertype < string RenderType = "Triangles"; > ;
 
 struct Particle
 {
@@ -15,9 +21,18 @@ struct Particle
     float3x4 testVar;
 };
 
-struct NotMe
+RWStructuredBuffer<Particle> particleData;
+
+struct PersistentGlobalData
 {
-    float notmeEither;
+    float timeSinceLastSpawn;
+};
+
+struct Render
+{
+    float3 pos0;
+    float3 pos1;
+    float3 pos2;
 };
 //Note the trailing semicolon. Important!
 
@@ -33,11 +48,25 @@ Particle Emit()
     return p;
 }
 
+void AddRender(Render tri)
+{
+
+}
 // Update is only allowed to modify data within Particle p.
 void Update(Particle p)
 {
     p.position += p.velocity * unity_DeltaTime;
+
+    Render tri;
+    tri.pos0 = float3(0, 0, 0);
+    tri.pos1 = float3(0, 1, 0);
+    tri.pos2 = float3(0, 0, 1);
+    AddRender(tri);
 }
+
+
+
+
 
 
 [numthreads(64, 1, 1)]

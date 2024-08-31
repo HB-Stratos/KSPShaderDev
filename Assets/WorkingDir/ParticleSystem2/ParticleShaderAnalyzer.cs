@@ -1,14 +1,47 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using UnityEditor.Experimental.GraphView;
+using UnityShaderParser.Common;
 using UnityShaderParser.HLSL;
+using UnityShaderParser.HLSL.PreProcessor;
 
-class StructSizeVisitor : HLSLSyntaxVisitor
+class ParticleShaderAnalyzer : HLSLSyntaxVisitor
 {
-    // Output
-    public int ParticleStructSize { get; private set; } = 0;
+    public ParticleShaderAnalyzer()
+    {
+        outputData = new OutputData();
+    }
 
-    public List<string> CpuSources { get; private set; } = new List<string>();
+    OutputData outputData;
+
+    public struct OutputData
+    {
+        public int particleStructSize;
+        public List<string> cpuSources;
+    }
+
+    public OutputData AnalyzeShader(string path)
+    {
+        string shaderFileContent = LoadTextFileFromPath(path);
+        if (String.IsNullOrEmpty(shaderFileContent))
+            throw new FileNotFoundException();
+
+        var decls = ShaderParser.ParseTopLevelDeclarations(
+            shaderFileContent,
+            new HLSLParserConfig() { PreProcessorMode = PreProcessorMode.StripDirectives }
+        );
+
+        this.VisitMany(decls); //call with extensive side effects
+
+        return outputData;
+    }
+
+    protected string LoadTextFileFromPath(string path)
+    {
+        return File.Exists(path) ? File.ReadAllText(path) : null;
+    }
 
     // Helpers
     int GetScalarTypeSize(ScalarType scalarType)
@@ -24,7 +57,7 @@ class StructSizeVisitor : HLSLSyntaxVisitor
             case ScalarType.Double:
                 return 8;
             default:
-                return 0; // Add whichever types you care about
+                throw new NotImplementedException("Error, type not yet supported in get size");
         }
     }
 
@@ -32,20 +65,21 @@ class StructSizeVisitor : HLSLSyntaxVisitor
     public override void VisitStructTypeNode(StructTypeNode node)
     {
         // Only care about particle struct
-        if (node.Name.GetName() == "Particle" && ParticleStructSize == 0)
+        if (node.Name.GetName() == "Particle" && outputData.particleStructSize == 0)
         {
             foreach (var field in node.Fields)
             {
                 switch (field.Kind)
                 {
                     case ScalarTypeNode scalar:
-                        ParticleStructSize += GetScalarTypeSize(scalar.Kind);
+                        outputData.particleStructSize += GetScalarTypeSize(scalar.Kind);
                         break;
                     case VectorTypeNode vector:
-                        ParticleStructSize += vector.Dimension * GetScalarTypeSize(vector.Kind);
+                        outputData.particleStructSize +=
+                            vector.Dimension * GetScalarTypeSize(vector.Kind);
                         break;
                     case MatrixTypeNode matrix:
-                        ParticleStructSize +=
+                        outputData.particleStructSize +=
                             matrix.FirstDimension
                             * matrix.SecondDimension
                             * GetScalarTypeSize(matrix.Kind);
@@ -78,7 +112,7 @@ class StructSizeVisitor : HLSLSyntaxVisitor
                 LiteralExpressionNode literalExpressionNode = (LiteralExpressionNode)
                     initializerNode.Expression;
 
-                CpuSources.Add(literalExpressionNode.Lexeme);
+                outputData.cpuSources.Add(literalExpressionNode.Lexeme);
             }
         }
         else
