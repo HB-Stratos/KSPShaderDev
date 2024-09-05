@@ -1,14 +1,17 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using UnityEngine;
 
 public class GpuParticleSystem2 : MonoBehaviour
 {
     [SerializeField]
-    int maxParticles;
+    int maxParticles = 10_000;
 
-    ComputeShader particleCompute;
+    [SerializeField]
+    ComputeShader particleComputeShader;
 
     ComputeBuffer availableIndices1;
     ComputeBuffer availableIndices2;
@@ -43,67 +46,115 @@ public class GpuParticleSystem2 : MonoBehaviour
 
     void Start()
     {
-        availableIndices1 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Append);
-        availableIndices2 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Append);
+        if (particleComputeShader == null)
+            throw new ArgumentException("No Shader assigned to script");
 
-        aliveIndices1 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Append);
-        aliveindices2 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Append);
+        InitializeBuffers();
+
+        FindKernelIDs();
+
+        FindBufferIDs();
+
+        DispatchParticleInitialize();
+    }
+
+    void Update()
+    {
+        isEvenFrame = !isEvenFrame; //This must stay here to flip buffers after nextAvailableIndices is initialized in Start()
+        UpdateCurrNextBuffers();
+
+        //Add a CPU emit function //Emit particle and consume free indices buffer
+        EmitParticle();
+        //Dispatch update kernel indirect
+        DispatchParticleUpdate();
+        //create material and dispatch vertex shader for debug visualisation
+        DebugVisualize();
+    }
+
+    void InitializeBuffers()
+    {
+        // csharpier-ignore-start
+        availableIndices1 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Append) {name = "availableIndices1"};
+        availableIndices2 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Append) {name = "availableIndices2"};
+
+        aliveIndices1 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Append) {name = "aliveIndices1"};
+        aliveindices2 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Append) {name = "aliveindices2"};
 
         ParticleShaderAnalyzer.OutputData particleShaderData =
             new ParticleShaderAnalyzer().AnalyzeShader(
                 "Assets/WorkingDir/ParticleSystem2/TestParticle.compute"
             );
 
-        particleData1 = new ComputeBuffer(maxParticles, particleShaderData.particleStructSize);
-        particleData2 = new ComputeBuffer(maxParticles, particleShaderData.particleStructSize);
+        particleData1 = new ComputeBuffer(
+            maxParticles,
+            particleShaderData.particleStructSize,
+            ComputeBufferType.Counter
+        ) {name = "particleData1"};
+        particleData2 = new ComputeBuffer(
+            maxParticles,
+            particleShaderData.particleStructSize,
+            ComputeBufferType.Counter
+        ) {name = "particleData2"};
+        // csharpier-ignore-end
 
-        updateIndArgs = new ComputeBuffer(4, sizeof(int), ComputeBufferType.IndirectArguments);
+
+        updateIndArgs = new ComputeBuffer(3, sizeof(int), ComputeBufferType.IndirectArguments)
+        {
+            name = "updateIndArgs"
+        };
         int[] bufferWithArgsData = new int[]
         {
-            0, /*vertex count per instance*/
-            1, /*instance count*/
-            0, /*start vertex location*/
-            0, /*start instance location*/
+            0, /*x thread count*/
+            1, /*y thread count*/
+            1, /*z thread count*/
         };
         updateIndArgs.SetData(bufferWithArgsData);
 
-        initKernel = particleCompute.FindKernel("Init");
-        emitKernel = particleCompute.FindKernel("Emit");
-        updateKernel = particleCompute.FindKernel("Update");
+        UpdateCurrNextBuffers();
+    }
 
+    void FindKernelIDs()
+    {
+        initKernel = particleComputeShader.FindKernel("_Init");
+        emitKernel = particleComputeShader.FindKernel("_CpuEmit");
+        updateKernel = particleComputeShader.FindKernel("_Update");
+    }
+
+    void FindBufferIDs()
+    {
         gpuID_currAvailableIndices = Shader.PropertyToID("_CurrAvailableIndices");
         gpuID_nextAvailableIndices = Shader.PropertyToID("_NextAvailableIndices");
         gpuID_currAliveIndices = Shader.PropertyToID("_CurrAliveIndices");
         gpuID_nextAliveIndices = Shader.PropertyToID("_NextAliveIndices");
         gpuID_currData = Shader.PropertyToID("_CurrData");
         gpuID_nextData = Shader.PropertyToID("_NextData");
+    }
 
+    /// <summary>
+    /// Initializes only the _NextAvailableIndices Buffer, must swap buffers after use
+    /// </summary>
+    void DispatchParticleInitialize()
+    {
         //initialize free indices buffer
         //change thread group count to div by 64
         AttachBuffersToKernel(initKernel, isEvenFrame);
-        particleCompute.Dispatch(initKernel, maxParticles, 1, 1);
-    }
 
-    void Update()
-    {
-        isEvenFrame = !isEvenFrame;
-        UpdateCurrNextBuffers();
-
-        //Add a CPU emit function //Emit particle and consume free indices buffer
-        EmitParticle();
-        //Dispatch update kernel indirect
-        AttachBuffersToKernel(updateKernel, isEvenFrame);
-        ComputeBuffer.CopyCount(currAliveIndices, updateIndArgs, 0);
-        particleCompute.DispatchIndirect(updateKernel, updateIndArgs);
-        //create material and dispatch vertex shader for debug visualisation
-        DebugVisualize();
+        int initThreadGroups = Mathf.CeilToInt(maxParticles / 64f);
+        particleComputeShader.Dispatch(initKernel, initThreadGroups, 1, 1);
     }
 
     void EmitParticle()
     {
         //this one should only have one thead in group
         AttachBuffersToKernel(emitKernel, isEvenFrame);
-        particleCompute.Dispatch(emitKernel, 1, 1, 1);
+        particleComputeShader.Dispatch(emitKernel, 1, 1, 1);
+    }
+
+    void DispatchParticleUpdate()
+    {
+        AttachBuffersToKernel(updateKernel, isEvenFrame);
+        ComputeBuffer.CopyCount(currAliveIndices, updateIndArgs, 0);
+        particleComputeShader.DispatchIndirect(updateKernel, updateIndArgs);
     }
 
     void DebugVisualize()
@@ -123,11 +174,28 @@ public class GpuParticleSystem2 : MonoBehaviour
 
     void AttachBuffersToKernel(int kernel, bool isEvenFrame)
     {
-        particleCompute.SetBuffer(kernel, gpuID_currAvailableIndices, currAvailableIndices);
-        particleCompute.SetBuffer(kernel, gpuID_currAvailableIndices, currAvailableIndices);
-        particleCompute.SetBuffer(kernel, gpuID_currAliveIndices, currAliveIndices);
-        particleCompute.SetBuffer(kernel, gpuID_nextAliveIndices, nextAliveIndices);
-        particleCompute.SetBuffer(kernel, gpuID_currData, currData);
-        particleCompute.SetBuffer(kernel, gpuID_nextData, nextData);
+        particleComputeShader.SetBuffer(kernel, gpuID_currAvailableIndices, currAvailableIndices);
+        particleComputeShader.SetBuffer(kernel, gpuID_nextAvailableIndices, nextAvailableIndices);
+        particleComputeShader.SetBuffer(kernel, gpuID_currAliveIndices, currAliveIndices);
+        particleComputeShader.SetBuffer(kernel, gpuID_nextAliveIndices, nextAliveIndices);
+        particleComputeShader.SetBuffer(kernel, gpuID_currData, currData);
+        particleComputeShader.SetBuffer(kernel, gpuID_nextData, nextData);
+    }
+
+    private List<ComputeBuffer> GetAllComputeBuffers()
+    {
+        var computeBufferFields = this.GetType()
+            .GetFields(BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Public)
+            .Where(p => p.FieldType == typeof(ComputeBuffer));
+        return computeBufferFields.Select(p => (ComputeBuffer)p.GetValue(this)).ToList();
+    }
+
+    void OnDestroy()
+    {
+        List<ComputeBuffer> test = this.GetAllComputeBuffers();
+        foreach (ComputeBuffer computeBuffer in GetAllComputeBuffers())
+        {
+            computeBuffer.Dispose();
+        }
     }
 }

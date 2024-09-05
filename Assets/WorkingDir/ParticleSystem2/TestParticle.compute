@@ -1,7 +1,7 @@
-﻿#pragma kernel CSMain
+﻿#pragma kernel _Init
+#pragma kernel _CpuEmit
+#pragma kernel _Update
 
-RWStructuredBuffer<float3> vertices;
-RWStructuredBuffer<int> triangles;
 
 
 
@@ -10,18 +10,29 @@ RWStructuredBuffer<int> triangles;
 int maxParticles = 10000;
 
 //Only some specific values can be gathered this way, check documentation (that doesn't exist rn)
-int unity_DeltaTime < string CpuSource = "Time.deltaTime" ; > ;
+int _DeltaTime < string CpuSource = "Time.deltaTime" ; > ; //Really we should not use Time.DeltaTime if this is e.g. updated in fixed update
 int rendertype < string RenderType = "Triangles"; > ;
 
 struct Particle
 {
+    float3 position; //must be first entry by convention
     float life;
-    float3 position;
     float3 velocity;
-    float3x4 testVar;
 };
 
-RWStructuredBuffer<Particle> particleData;
+RWStructuredBuffer<float3> vertices;
+RWStructuredBuffer<int> triangles;
+
+ConsumeStructuredBuffer<int> _CurrAvailableIndices;
+AppendStructuredBuffer<int> _NextAvailableIndices;
+
+ConsumeStructuredBuffer<int> _CurrAliveIndices;
+AppendStructuredBuffer<int> _NextAliveIndices;
+
+RWStructuredBuffer<Particle> _CurrData;
+uint _CurrDataCount;
+uint _CurrDataStride;
+// RWStructuredBuffer<Particle> _NextData;
 
 struct PersistentGlobalData
 {
@@ -52,10 +63,16 @@ void AddRender(Render tri)
 {
 
 }
-// Update is only allowed to modify data within Particle p.
-void Update(Particle p)
+
+Particle GetParent()
 {
-    p.position += p.velocity * unity_DeltaTime;
+
+}
+
+// Update is only allowed to modify data within Particle p.
+void Update(inout Particle p)
+{
+    p.position += p.velocity * _DeltaTime;
 
     Render tri;
     tri.pos0 = float3(0, 0, 0);
@@ -66,11 +83,43 @@ void Update(Particle p)
 
 
 
-
-
-
-[numthreads(64, 1, 1)]
-void CSMain(uint3 id : SV_DispatchThreadID)
+void _Emit(Particle p)
 {
-
+    uint newParticleIndex = _CurrData.IncrementCounter();
+    if (newParticleIndex >= _CurrDataCount) return;
+    
+    //new particle index can also be used for parenting, would require multiple emits in the same call though
+    _CurrData[newParticleIndex] = p;
+    _NextAliveIndices.Append(newParticleIndex);
 }
+
+//TODO kinda ugly to have only one thread in group, fix maybe?
+//TODO make particle parenting possible
+[numthreads(1, 1, 1)]
+void _CpuEmit()
+{
+    _Emit(Emit());
+}
+
+//TODO this would ideally be (64, 1, 1), but this is not possible with the current copy count.
+[numthreads(1, 1, 1)]
+void _Update(uint3 id : SV_DispatchThreadID)
+{
+    //TODO call Update() with particle from struct, maybe handle emitting itself again?
+    Particle p = _CurrData[id.x];
+    Update(p);
+    _CurrData[id.x] = p;
+}
+
+[numthreads(64, 1, 1)] //Initialize the available indices buffer
+void _Init(uint3 id : SV_DispatchThreadID)
+{
+    _NextAvailableIndices.Append(id.x);
+    if (id.x == 0)
+    {
+        _CurrData.GetDimensions(_CurrDataCount, _CurrDataStride);
+    }
+}
+
+
+

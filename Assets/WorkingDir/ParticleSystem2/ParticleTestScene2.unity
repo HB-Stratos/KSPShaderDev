@@ -690,15 +690,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 1382540413}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9cd28c9f8bf49de4ca7940ebda3d924f, type: 3}
+  m_Script: {fileID: 11500000, guid: 468efcace06fb4749bd27daef3fa43d3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  emitVector: {x: 0, y: 0, z: 1}
-  isBillboard: 1
-  maxParticleCount: 100000
-  particleMesh: {fileID: 10210, guid: 0000000000000000e000000000000000, type: 0}
-  computeShader: {fileID: 7200000, guid: 2942c4e464609a744b64646e97264056, type: 3}
-  particleShader: {fileID: 4800000, guid: e928cf803d890d74c85bebf361766d1b, type: 3}
+  maxParticles: 10000
+  particleComputeShader: {fileID: 7200000, guid: ac968e0cb06765d498d00175940ef571,
+    type: 3}
 --- !u!4 &1382540415
 Transform:
   m_ObjectHideFlags: 0

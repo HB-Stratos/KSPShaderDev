@@ -11,7 +11,7 @@ class ParticleShaderAnalyzer : HLSLSyntaxVisitor
 {
     public ParticleShaderAnalyzer()
     {
-        outputData = new OutputData();
+        outputData = new OutputData() { particleStructSize = 0, cpuSources = new List<string>() };
     }
 
     OutputData outputData;
