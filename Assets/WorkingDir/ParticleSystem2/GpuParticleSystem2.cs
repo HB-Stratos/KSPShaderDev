@@ -28,6 +28,7 @@ public class GpuParticleSystem2 : MonoBehaviour
 
     int initKernel;
     int emitKernel;
+    int earlyUpdateKernel;
     int updateKernel;
 
     int gpuID_currAvailableIndices;
@@ -36,6 +37,7 @@ public class GpuParticleSystem2 : MonoBehaviour
     int gpuID_nextAliveIndices;
     int gpuID_currData;
     int gpuID_nextData;
+    int gpuID_updateIndArgs;
 
     ComputeBuffer currAvailableIndices;
     ComputeBuffer nextAvailableIndices;
@@ -60,8 +62,8 @@ public class GpuParticleSystem2 : MonoBehaviour
 
     void Update()
     {
-        isEvenFrame = !isEvenFrame; //This must stay here to flip buffers after nextAvailableIndices is initialized in Start()
-        UpdateCurrNextBuffers();
+        // isEvenFrame = !isEvenFrame; //This must stay here to flip buffers after nextAvailableIndices is initialized in Start()
+        // UpdateCurrNextBuffers();
 
         //Add a CPU emit function //Emit particle and consume free indices buffer
         EmitParticle();
@@ -117,6 +119,7 @@ public class GpuParticleSystem2 : MonoBehaviour
     {
         initKernel = particleComputeShader.FindKernel("_Init");
         emitKernel = particleComputeShader.FindKernel("_CpuEmit");
+        earlyUpdateKernel = particleComputeShader.FindKernel("_EarlyUpdate");
         updateKernel = particleComputeShader.FindKernel("_Update");
     }
 
@@ -128,6 +131,7 @@ public class GpuParticleSystem2 : MonoBehaviour
         gpuID_nextAliveIndices = Shader.PropertyToID("_NextAliveIndices");
         gpuID_currData = Shader.PropertyToID("_CurrData");
         gpuID_nextData = Shader.PropertyToID("_NextData");
+        gpuID_updateIndArgs = Shader.PropertyToID("_UpdateIndArgs");
     }
 
     /// <summary>
@@ -152,6 +156,9 @@ public class GpuParticleSystem2 : MonoBehaviour
 
     void DispatchParticleUpdate()
     {
+        particleComputeShader.SetBuffer(earlyUpdateKernel, gpuID_updateIndArgs, updateIndArgs);
+        particleComputeShader.Dispatch(earlyUpdateKernel, 1, 1, 1);
+
         AttachBuffersToKernel(updateKernel, isEvenFrame);
         ComputeBuffer.CopyCount(currAliveIndices, updateIndArgs, 0);
         particleComputeShader.DispatchIndirect(updateKernel, updateIndArgs);

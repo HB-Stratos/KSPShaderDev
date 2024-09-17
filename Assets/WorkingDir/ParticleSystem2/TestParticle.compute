@@ -1,13 +1,18 @@
 ﻿#pragma kernel _Init
 #pragma kernel _CpuEmit
+#pragma kernel _EarlyUpdate
 #pragma kernel _Update
 
-
+//TODO lots of fixing to do
+// Available Indices must be maintained to allow for random particle lifetimes
+// Somehow data buffer coherence should be maintaned, maybe the stack-like behavior of the avaliable index buffer works here?
+// I think the index buffer wouldn't work, double-buffering the particle buffer and making it (fake) append would work.
+// need to be careful with maintaining ability to have parented particles -> ffs this might break memory coherence through appending
 
 
 // do not make this overly high, it determines shader size
-//TODO this should really be dynamic, not user defined in source
-int maxParticles = 10000;
+// //TODO this should really be dynamic, not user defined in source
+// int maxParticles = 10000;
 
 //Only some specific values can be gathered this way, check documentation (that doesn't exist rn)
 int _DeltaTime < string CpuSource = "Time.deltaTime" ; > ; //Really we should not use Time.DeltaTime if this is e.g. updated in fixed update
@@ -20,19 +25,22 @@ struct Particle
     float3 velocity;
 };
 
-RWStructuredBuffer<float3> vertices;
-RWStructuredBuffer<int> triangles;
+// RWStructuredBuffer<float3> vertices;
+// RWStructuredBuffer<int> triangles;
 
 ConsumeStructuredBuffer<int> _CurrAvailableIndices;
 AppendStructuredBuffer<int> _NextAvailableIndices;
 
-ConsumeStructuredBuffer<int> _CurrAliveIndices;
-AppendStructuredBuffer<int> _NextAliveIndices;
+// ConsumeStructuredBuffer<int> _CurrAliveIndices;
+// AppendStructuredBuffer<int> _NextAliveIndices;
 
 RWStructuredBuffer<Particle> _CurrData;
 uint _CurrDataCount;
 uint _CurrDataStride;
+uint _CurrDataInUseCount = 0;
 // RWStructuredBuffer<Particle> _NextData;
+
+RWStructuredBuffer<int> _UpdateIndArgs;
 
 struct PersistentGlobalData
 {
@@ -82,15 +90,26 @@ void Update(inout Particle p)
 }
 
 
+int IncrementDataCounter()
+{
+    _CurrDataInUseCount++;
+    return _CurrData.IncrementCounter();
+}
+int DecrementDataCounter()
+{
+    _CurrDataInUseCount--;
+    return _CurrData.DecrementCounter();
+}
+
+
 
 void _Emit(Particle p)
 {
-    uint newParticleIndex = _CurrData.IncrementCounter();
+    uint newParticleIndex = IncrementDataCounter();
     if (newParticleIndex >= _CurrDataCount) return;
     
     //new particle index can also be used for parenting, would require multiple emits in the same call though
     _CurrData[newParticleIndex] = p;
-    _NextAliveIndices.Append(newParticleIndex);
 }
 
 //TODO kinda ugly to have only one thread in group, fix maybe?
@@ -102,6 +121,7 @@ void _CpuEmit()
 }
 
 //TODO this would ideally be (64, 1, 1), but this is not possible with the current copy count.
+//TODO ffs this implementation of reading and writing may cause a race condition when accessing parents
 [numthreads(1, 1, 1)]
 void _Update(uint3 id : SV_DispatchThreadID)
 {
@@ -111,10 +131,19 @@ void _Update(uint3 id : SV_DispatchThreadID)
     _CurrData[id.x] = p;
 }
 
+[numthreads(1, 1, 1)]
+void _EarlyUpdate()
+{
+    _CurrDataInUseCount = _CurrData.IncrementCounter();
+    // _CurrData.DecrementCounter();
+    _UpdateIndArgs[0] = _CurrDataInUseCount;
+}
+
+//TODO only dispatch one init thread, or init the entire particle buffer
 [numthreads(64, 1, 1)] //Initialize the available indices buffer
 void _Init(uint3 id : SV_DispatchThreadID)
 {
-    _NextAvailableIndices.Append(id.x);
+    // _NextAvailableIndices.Append(id.x);
     if (id.x == 0)
     {
         _CurrData.GetDimensions(_CurrDataCount, _CurrDataStride);
