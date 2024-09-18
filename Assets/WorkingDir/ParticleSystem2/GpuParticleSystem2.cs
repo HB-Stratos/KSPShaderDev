@@ -14,13 +14,16 @@ public class GpuParticleSystem2 : MonoBehaviour
     ComputeShader particleComputeShader;
 
     ComputeBuffer availableIndices1;
-    ComputeBuffer availableIndices2;
+
+    // ComputeBuffer availableIndices2;
 
     ComputeBuffer aliveIndices1;
-    ComputeBuffer aliveindices2;
+
+    // ComputeBuffer aliveindices2;
 
     ComputeBuffer particleData1;
-    ComputeBuffer particleData2;
+
+    // ComputeBuffer particleData2;
 
     ComputeBuffer updateIndArgs;
 
@@ -32,19 +35,26 @@ public class GpuParticleSystem2 : MonoBehaviour
     int updateKernel;
 
     int gpuID_currAvailableIndices;
-    int gpuID_nextAvailableIndices;
+
+    // int gpuID_nextAvailableIndices;
     int gpuID_currAliveIndices;
-    int gpuID_nextAliveIndices;
+
+    // int gpuID_nextAliveIndices;
     int gpuID_currData;
-    int gpuID_nextData;
+
+    // int gpuID_nextData;
+
     int gpuID_updateIndArgs;
 
     ComputeBuffer currAvailableIndices;
-    ComputeBuffer nextAvailableIndices;
+
+    // ComputeBuffer nextAvailableIndices;
     ComputeBuffer currAliveIndices;
-    ComputeBuffer nextAliveIndices;
+
+    // ComputeBuffer nextAliveIndices;
     ComputeBuffer currData;
-    ComputeBuffer nextData;
+
+    // ComputeBuffer nextData;
 
     void Start()
     {
@@ -65,7 +75,7 @@ public class GpuParticleSystem2 : MonoBehaviour
         // isEvenFrame = !isEvenFrame; //This must stay here to flip buffers after nextAvailableIndices is initialized in Start()
         // UpdateCurrNextBuffers();
 
-        //Add a CPU emit function //Emit particle and consume free indices buffer
+        //Emit particle and consume free indices buffer
         EmitParticle();
         //Dispatch update kernel indirect
         DispatchParticleUpdate();
@@ -76,11 +86,11 @@ public class GpuParticleSystem2 : MonoBehaviour
     void InitializeBuffers()
     {
         // csharpier-ignore-start
-        availableIndices1 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Append) {name = "availableIndices1"};
-        availableIndices2 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Append) {name = "availableIndices2"};
+        availableIndices1 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Counter) {name = "availableIndices1"};
+        // availableIndices2 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Append) {name = "availableIndices2"};
 
-        aliveIndices1 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Append) {name = "aliveIndices1"};
-        aliveindices2 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Append) {name = "aliveindices2"};
+        aliveIndices1 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Counter) {name = "aliveIndices1"};
+        // aliveindices2 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Append) {name = "aliveindices2"};
 
         ParticleShaderAnalyzer.OutputData particleShaderData =
             new ParticleShaderAnalyzer().AnalyzeShader(
@@ -90,13 +100,13 @@ public class GpuParticleSystem2 : MonoBehaviour
         particleData1 = new ComputeBuffer(
             maxParticles,
             particleShaderData.particleStructSize,
-            ComputeBufferType.Counter
+            ComputeBufferType.Default
         ) {name = "particleData1"};
-        particleData2 = new ComputeBuffer(
-            maxParticles,
-            particleShaderData.particleStructSize,
-            ComputeBufferType.Counter
-        ) {name = "particleData2"};
+        // particleData2 = new ComputeBuffer(
+        //     maxParticles,
+        //     particleShaderData.particleStructSize,
+        //     ComputeBufferType.Counter
+        // ) {name = "particleData2"};
         // csharpier-ignore-end
 
 
@@ -126,11 +136,11 @@ public class GpuParticleSystem2 : MonoBehaviour
     void FindBufferIDs()
     {
         gpuID_currAvailableIndices = Shader.PropertyToID("_CurrAvailableIndices");
-        gpuID_nextAvailableIndices = Shader.PropertyToID("_NextAvailableIndices");
+        // gpuID_nextAvailableIndices = Shader.PropertyToID("_NextAvailableIndices");
         gpuID_currAliveIndices = Shader.PropertyToID("_CurrAliveIndices");
-        gpuID_nextAliveIndices = Shader.PropertyToID("_NextAliveIndices");
+        // gpuID_nextAliveIndices = Shader.PropertyToID("_NextAliveIndices");
         gpuID_currData = Shader.PropertyToID("_CurrData");
-        gpuID_nextData = Shader.PropertyToID("_NextData");
+        // gpuID_nextData = Shader.PropertyToID("_NextData");
         gpuID_updateIndArgs = Shader.PropertyToID("_UpdateIndArgs");
     }
 
@@ -156,11 +166,11 @@ public class GpuParticleSystem2 : MonoBehaviour
 
     void DispatchParticleUpdate()
     {
+        ComputeBuffer.CopyCount(currAliveIndices, updateIndArgs, 0);
         particleComputeShader.SetBuffer(earlyUpdateKernel, gpuID_updateIndArgs, updateIndArgs);
         particleComputeShader.Dispatch(earlyUpdateKernel, 1, 1, 1);
 
         AttachBuffersToKernel(updateKernel, isEvenFrame);
-        ComputeBuffer.CopyCount(currAliveIndices, updateIndArgs, 0);
         particleComputeShader.DispatchIndirect(updateKernel, updateIndArgs);
     }
 
@@ -171,22 +181,26 @@ public class GpuParticleSystem2 : MonoBehaviour
 
     void UpdateCurrNextBuffers()
     {
-        currAvailableIndices = isEvenFrame ? availableIndices1 : availableIndices2;
-        nextAvailableIndices = isEvenFrame ? availableIndices2 : availableIndices1;
-        currAliveIndices = isEvenFrame ? aliveIndices1 : aliveindices2;
-        nextAliveIndices = isEvenFrame ? aliveindices2 : aliveIndices1;
-        currData = isEvenFrame ? particleData1 : particleData2;
-        nextData = isEvenFrame ? particleData2 : particleData1;
+        // currAvailableIndices = isEvenFrame ? availableIndices1 : availableIndices2;
+        // nextAvailableIndices = isEvenFrame ? availableIndices2 : availableIndices1;
+        // currAliveIndices = isEvenFrame ? aliveIndices1 : aliveindices2;
+        // nextAliveIndices = isEvenFrame ? aliveindices2 : aliveIndices1;
+        // currData = isEvenFrame ? particleData1 : particleData2;
+        // nextData = isEvenFrame ? particleData2 : particleData1;
+
+        currAvailableIndices = availableIndices1;
+        currAliveIndices = aliveIndices1;
+        currData = particleData1;
     }
 
     void AttachBuffersToKernel(int kernel, bool isEvenFrame)
     {
         particleComputeShader.SetBuffer(kernel, gpuID_currAvailableIndices, currAvailableIndices);
-        particleComputeShader.SetBuffer(kernel, gpuID_nextAvailableIndices, nextAvailableIndices);
+        // particleComputeShader.SetBuffer(kernel, gpuID_nextAvailableIndices, nextAvailableIndices);
         particleComputeShader.SetBuffer(kernel, gpuID_currAliveIndices, currAliveIndices);
-        particleComputeShader.SetBuffer(kernel, gpuID_nextAliveIndices, nextAliveIndices);
+        // particleComputeShader.SetBuffer(kernel, gpuID_nextAliveIndices, nextAliveIndices);
         particleComputeShader.SetBuffer(kernel, gpuID_currData, currData);
-        particleComputeShader.SetBuffer(kernel, gpuID_nextData, nextData);
+        // particleComputeShader.SetBuffer(kernel, gpuID_nextData, nextData);
     }
 
     private List<ComputeBuffer> GetAllComputeBuffers()

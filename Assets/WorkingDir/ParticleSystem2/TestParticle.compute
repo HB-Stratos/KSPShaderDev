@@ -1,4 +1,6 @@
-﻿#pragma kernel _Init
+﻿#pragma enable_d3d11_debug_symbols
+
+#pragma kernel _Init
 #pragma kernel _CpuEmit
 #pragma kernel _EarlyUpdate
 #pragma kernel _Update
@@ -23,22 +25,18 @@ struct Particle
     float3 position; //must be first entry by convention
     float life;
     float3 velocity;
+    int index; //index of particle in the data buffer, used for parenting
+    int parent;
 };
 
-// RWStructuredBuffer<float3> vertices;
-// RWStructuredBuffer<int> triangles;
+RWStructuredBuffer<int> _CurrAvailableIndices;
 
-ConsumeStructuredBuffer<int> _CurrAvailableIndices;
-AppendStructuredBuffer<int> _NextAvailableIndices;
-
-// ConsumeStructuredBuffer<int> _CurrAliveIndices;
-// AppendStructuredBuffer<int> _NextAliveIndices;
+RWStructuredBuffer<int> _CurrAliveIndices;
 
 RWStructuredBuffer<Particle> _CurrData;
-uint _CurrDataCount;
+uint _CurrDataSize;
 uint _CurrDataStride;
 uint _CurrDataInUseCount = 0;
-// RWStructuredBuffer<Particle> _NextData;
 
 RWStructuredBuffer<int> _UpdateIndArgs;
 
@@ -64,8 +62,11 @@ Particle Emit()
     p.life = 10;
     p.position = float3(0, 0, 0);
     p.velocity = float3(0, 0, 1);
+    p.index = -1;
+    p.parent = -1;
     return p;
 }
+
 
 void AddRender(Render tri)
 {
@@ -90,25 +91,40 @@ void Update(inout Particle p)
 }
 
 
-int IncrementDataCounter()
-{
-    _CurrDataInUseCount++;
-    return _CurrData.IncrementCounter();
-}
-int DecrementDataCounter()
-{
-    _CurrDataInUseCount--;
-    return _CurrData.DecrementCounter();
-}
+// int IncrementDataCounter()
+// {
+//     _CurrDataInUseCount++;
+//     return _CurrData.IncrementCounter();
+// }
+// int DecrementDataCounter()
+// {
+//     _CurrDataInUseCount--;
+//     return _CurrData.DecrementCounter();
+// }
 
 
+
+uint ReviveParticleIndex()
+{
+    uint availableIndicesIndex = _CurrAvailableIndices.DecrementCounter();
+    uint newParticleIndex = _CurrAvailableIndices[availableIndicesIndex];
+    uint aliveIndicesIndex = _CurrAliveIndices.IncrementCounter();
+    _CurrAliveIndices[aliveIndicesIndex] = newParticleIndex;
+    return newParticleIndex;
+}
+//TODO do not use this, instead a particle must emit itself every frame, otherwise I need a search through aliveIndices
+// void KillParticleIndex(uint index)
+// {
+//     uint aliveIndicesIndex
+// }
 
 void _Emit(Particle p)
 {
-    uint newParticleIndex = IncrementDataCounter();
-    if (newParticleIndex >= _CurrDataCount) return;
+    uint newParticleIndex = ReviveParticleIndex();
+    // if (newParticleIndex >= _CurrDataSize) return; //TODO reinstate this with working implementation to prevent out of bounds write
     
     //new particle index can also be used for parenting, would require multiple emits in the same call though
+    p.index = newParticleIndex;
     _CurrData[newParticleIndex] = p;
 }
 
@@ -121,32 +137,39 @@ void _CpuEmit()
 }
 
 //TODO this would ideally be (64, 1, 1), but this is not possible with the current copy count.
+//TODO WARNING if this was 64 threads I might run too many threads and consume more data than present in the buffer
 //TODO ffs this implementation of reading and writing may cause a race condition when accessing parents
 [numthreads(1, 1, 1)]
 void _Update(uint3 id : SV_DispatchThreadID)
 {
     //TODO call Update() with particle from struct, maybe handle emitting itself again?
-    Particle p = _CurrData[id.x];
+    uint processedParticleIndex = _CurrAliveIndices[id.x];
+    Particle p = _CurrData[processedParticleIndex];
     Update(p);
-    _CurrData[id.x] = p;
+    _CurrData[processedParticleIndex] = p;
 }
 
 [numthreads(1, 1, 1)]
 void _EarlyUpdate()
 {
-    _CurrDataInUseCount = _CurrData.IncrementCounter();
+    // _CurrDataInUseCount = _CurrData.IncrementCounter();
     // _CurrData.DecrementCounter();
-    _UpdateIndArgs[0] = _CurrDataInUseCount;
+    uint threadGroupSize = 64;
+    _UpdateIndArgs[0] = (_UpdateIndArgs[0] + (threadGroupSize - 1)) / threadGroupSize;
 }
 
-//TODO only dispatch one init thread, or init the entire particle buffer
 [numthreads(64, 1, 1)] //Initialize the available indices buffer
 void _Init(uint3 id : SV_DispatchThreadID)
 {
-    // _NextAvailableIndices.Append(id.x);
+    
     if (id.x == 0)
     {
-        _CurrData.GetDimensions(_CurrDataCount, _CurrDataStride);
+        _CurrData.GetDimensions(_CurrDataSize, _CurrDataStride);
+    }
+    if (id.x < _CurrDataSize) //TODO This is probably a race condition
+
+    {
+        _CurrAvailableIndices[id.x] = id.x;
     }
 }
 
