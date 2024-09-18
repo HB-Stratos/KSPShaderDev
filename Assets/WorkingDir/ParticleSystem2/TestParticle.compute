@@ -17,7 +17,7 @@
 // int maxParticles = 10000;
 
 //Only some specific values can be gathered this way, check documentation (that doesn't exist rn)
-int _DeltaTime < string CpuSource = "Time.deltaTime" ; > ; //Really we should not use Time.DeltaTime if this is e.g. updated in fixed update
+float _DeltaTime < string CpuSource = "Time.deltaTime" ; > ; //Really we should not use Time.DeltaTime if this is e.g. updated in fixed update
 int rendertype < string RenderType = "Triangles"; > ;
 
 struct Particle
@@ -29,21 +29,23 @@ struct Particle
     int parent;
 };
 
-RWStructuredBuffer<int> _CurrAvailableIndices;
+#define UINT_MAX 4294967295
 
-RWStructuredBuffer<int> _CurrAliveIndices;
+RWStructuredBuffer<int> _AvailableIndices;
 
-RWStructuredBuffer<Particle> _CurrData;
-uint _CurrDataSize;
-uint _CurrDataStride;
-uint _CurrDataInUseCount = 0;
+ConsumeStructuredBuffer<int> _AliveIndices;
+AppendStructuredBuffer<int> _NextAliveIndices;
+
+RWStructuredBuffer<Particle> _ParticleData;
+uint _ParticleDataSize;
+uint _ParticleDataStride;
 
 RWStructuredBuffer<int> _UpdateIndArgs;
 
-struct PersistentGlobalData
-{
-    float timeSinceLastSpawn;
-};
+// struct PersistentGlobalData
+// {
+//     float timeSinceLastSpawn;
+// };
 
 struct Render
 {
@@ -73,59 +75,59 @@ void AddRender(Render tri)
 
 }
 
-Particle GetParent()
-{
+// Particle GetParent()
+// {
 
-}
+// }
 
 // Update is only allowed to modify data within Particle p.
-void Update(inout Particle p)
+bool Update(inout Particle p)
 {
     p.position += p.velocity * _DeltaTime;
+
+    p.life -= _DeltaTime;
 
     Render tri;
     tri.pos0 = float3(0, 0, 0);
     tri.pos1 = float3(0, 1, 0);
     tri.pos2 = float3(0, 0, 1);
     AddRender(tri);
+    return true; //return false to kill particle
+
 }
 
 
 // int IncrementDataCounter()
 // {
-//     _CurrDataInUseCount++;
-//     return _CurrData.IncrementCounter();
+//     _ParticleDataInUseCount++;
+//     return _ParticleData.IncrementCounter();
 // }
 // int DecrementDataCounter()
 // {
-//     _CurrDataInUseCount--;
-//     return _CurrData.DecrementCounter();
+//     _ParticleDataInUseCount--;
+//     return _ParticleData.DecrementCounter();
 // }
 
 
 
-uint ReviveParticleIndex()
+uint GetNewParticleIndex()
 {
-    uint availableIndicesIndex = _CurrAvailableIndices.DecrementCounter();
-    uint newParticleIndex = _CurrAvailableIndices[availableIndicesIndex];
-    uint aliveIndicesIndex = _CurrAliveIndices.IncrementCounter();
-    _CurrAliveIndices[aliveIndicesIndex] = newParticleIndex;
+    uint availableIndicesIndex = _AvailableIndices.DecrementCounter();
+    // if (availableIndicesIndex > _ParticleDataSize) return UINT_MAX;
+    
+    uint newParticleIndex = _AvailableIndices[availableIndicesIndex];
+    _NextAliveIndices.Append(newParticleIndex);
     return newParticleIndex;
 }
-//TODO do not use this, instead a particle must emit itself every frame, otherwise I need a search through aliveIndices
-// void KillParticleIndex(uint index)
-// {
-//     uint aliveIndicesIndex
-// }
 
 void _Emit(Particle p)
 {
-    uint newParticleIndex = ReviveParticleIndex();
-    // if (newParticleIndex >= _CurrDataSize) return; //TODO reinstate this with working implementation to prevent out of bounds write
+    uint newParticleIndex = GetNewParticleIndex();
+    // if (newParticleIndex == UINT_MAX) return;
     
     //new particle index can also be used for parenting, would require multiple emits in the same call though
     p.index = newParticleIndex;
-    _CurrData[newParticleIndex] = p;
+    _ParticleData[newParticleIndex] = p;
 }
 
 //TODO kinda ugly to have only one thread in group, fix maybe?
@@ -143,17 +145,17 @@ void _CpuEmit()
 void _Update(uint3 id : SV_DispatchThreadID)
 {
     //TODO call Update() with particle from struct, maybe handle emitting itself again?
-    uint processedParticleIndex = _CurrAliveIndices[id.x];
-    Particle p = _CurrData[processedParticleIndex];
-    Update(p);
-    _CurrData[processedParticleIndex] = p;
+    uint processedParticleIndex = _AliveIndices.Consume();
+    Particle p = _ParticleData[processedParticleIndex];
+    if (Update(p)) _NextAliveIndices.Append(processedParticleIndex);
+    _ParticleData[processedParticleIndex] = p;
 }
 
 [numthreads(1, 1, 1)]
 void _EarlyUpdate()
 {
-    // _CurrDataInUseCount = _CurrData.IncrementCounter();
-    // _CurrData.DecrementCounter();
+    // _ParticleDataInUseCount = _ParticleData.IncrementCounter();
+    // _ParticleData.DecrementCounter();
     uint threadGroupSize = 64;
     _UpdateIndArgs[0] = (_UpdateIndArgs[0] + (threadGroupSize - 1)) / threadGroupSize;
 }
@@ -164,13 +166,11 @@ void _Init(uint3 id : SV_DispatchThreadID)
     
     if (id.x == 0)
     {
-        _CurrData.GetDimensions(_CurrDataSize, _CurrDataStride);
+        _ParticleData.GetDimensions(_ParticleDataSize, _ParticleDataStride);
     }
-    if (id.x < _CurrDataSize) //TODO This is probably a race condition
+    
+    _AvailableIndices[id.x] = id.x; //TODO WARNING out of bounds write, probably fine only in dx11
 
-    {
-        _CurrAvailableIndices[id.x] = id.x;
-    }
 }
 
 

@@ -12,49 +12,27 @@ public class GpuParticleSystem2 : MonoBehaviour
 
     [SerializeField]
     ComputeShader particleComputeShader;
-
-    ComputeBuffer availableIndices1;
-
-    // ComputeBuffer availableIndices2;
-
-    ComputeBuffer aliveIndices1;
-
-    // ComputeBuffer aliveindices2;
-
-    ComputeBuffer particleData1;
-
-    // ComputeBuffer particleData2;
-
     ComputeBuffer updateIndArgs;
-
-    bool isEvenFrame = false;
 
     int initKernel;
     int emitKernel;
     int earlyUpdateKernel;
     int updateKernel;
 
-    int gpuID_currAvailableIndices;
-
-    // int gpuID_nextAvailableIndices;
-    int gpuID_currAliveIndices;
-
-    // int gpuID_nextAliveIndices;
-    int gpuID_currData;
-
-    // int gpuID_nextData;
-
+    int gpuID_availableIndices;
+    int gpuID_aliveIndices;
+    int gpuID_nextAliveIndices;
+    int gpuID_particleData;
     int gpuID_updateIndArgs;
 
-    ComputeBuffer currAvailableIndices;
+    ComputeBuffer availableIndices;
+    ComputeBuffer aliveIndices;
+    ComputeBuffer nextAliveIndices;
+    ComputeBuffer aliveIndices1;
+    ComputeBuffer aliveIndices2;
+    ComputeBuffer particleData;
 
-    // ComputeBuffer nextAvailableIndices;
-    ComputeBuffer currAliveIndices;
-
-    // ComputeBuffer nextAliveIndices;
-    ComputeBuffer currData;
-
-    // ComputeBuffer nextData;
+    bool isEvenFrame = false;
 
     void Start()
     {
@@ -67,62 +45,46 @@ public class GpuParticleSystem2 : MonoBehaviour
 
         FindBufferIDs();
 
+        UpdateSwapBuffers(isEvenFrame);
+
         DispatchParticleInitialize();
+
+        aliveIndices1.SetCounterValue(0);
+        aliveIndices2.SetCounterValue(0);
+
+        DebugVisualizeInit();
     }
 
     void Update()
     {
-        // isEvenFrame = !isEvenFrame; //This must stay here to flip buffers after nextAvailableIndices is initialized in Start()
-        // UpdateCurrNextBuffers();
+        isEvenFrame = !isEvenFrame;
+        UpdateSwapBuffers(isEvenFrame);
 
         //Emit particle and consume free indices buffer
         EmitParticle();
         //Dispatch update kernel indirect
+        particleComputeShader.SetFloat("_DeltaTime", Time.deltaTime); //TEMP TESTING
         DispatchParticleUpdate();
         //create material and dispatch vertex shader for debug visualisation
-        DebugVisualize();
+        DebugVisualizeUpdate();
     }
 
     void InitializeBuffers()
     {
         // csharpier-ignore-start
-        availableIndices1 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Counter) {name = "availableIndices1"};
-        // availableIndices2 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Append) {name = "availableIndices2"};
-
+        availableIndices = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Counter) {name = "availableIndices"};
         aliveIndices1 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Counter) {name = "aliveIndices1"};
-        // aliveindices2 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Append) {name = "aliveindices2"};
+        aliveIndices2 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Counter) {name = "aliveIndices2"};
 
-        ParticleShaderAnalyzer.OutputData particleShaderData =
-            new ParticleShaderAnalyzer().AnalyzeShader(
-                "Assets/WorkingDir/ParticleSystem2/TestParticle.compute"
-            );
 
-        particleData1 = new ComputeBuffer(
-            maxParticles,
-            particleShaderData.particleStructSize,
-            ComputeBufferType.Default
-        ) {name = "particleData1"};
-        // particleData2 = new ComputeBuffer(
-        //     maxParticles,
-        //     particleShaderData.particleStructSize,
-        //     ComputeBufferType.Counter
-        // ) {name = "particleData2"};
+        availableIndices.SetCounterValue((uint)maxParticles);
+
+        ParticleShaderAnalyzer.OutputData particleShaderData = new ParticleShaderAnalyzer().AnalyzeShader("Assets/WorkingDir/ParticleSystem2/TestParticle.compute");
+        particleData = new ComputeBuffer(maxParticles, particleShaderData.particleStructSize, ComputeBufferType.Default ) {name = "particleData1"};
+        updateIndArgs = new ComputeBuffer(3, sizeof(int), ComputeBufferType.IndirectArguments) {name = "updateIndArgs"};
+        int[] bufferWithArgsData = new int[]{0 /*x thread count*/,  1 /*y thread count*/,  1 /*z thread count*/  };
         // csharpier-ignore-end
-
-
-        updateIndArgs = new ComputeBuffer(3, sizeof(int), ComputeBufferType.IndirectArguments)
-        {
-            name = "updateIndArgs"
-        };
-        int[] bufferWithArgsData = new int[]
-        {
-            0, /*x thread count*/
-            1, /*y thread count*/
-            1, /*z thread count*/
-        };
         updateIndArgs.SetData(bufferWithArgsData);
-
-        UpdateCurrNextBuffers();
     }
 
     void FindKernelIDs()
@@ -135,23 +97,16 @@ public class GpuParticleSystem2 : MonoBehaviour
 
     void FindBufferIDs()
     {
-        gpuID_currAvailableIndices = Shader.PropertyToID("_CurrAvailableIndices");
-        // gpuID_nextAvailableIndices = Shader.PropertyToID("_NextAvailableIndices");
-        gpuID_currAliveIndices = Shader.PropertyToID("_CurrAliveIndices");
-        // gpuID_nextAliveIndices = Shader.PropertyToID("_NextAliveIndices");
-        gpuID_currData = Shader.PropertyToID("_CurrData");
-        // gpuID_nextData = Shader.PropertyToID("_NextData");
+        gpuID_availableIndices = Shader.PropertyToID("_AvailableIndices");
+        gpuID_aliveIndices = Shader.PropertyToID("_AliveIndices");
+        gpuID_nextAliveIndices = Shader.PropertyToID("_NextAliveIndices");
+        gpuID_particleData = Shader.PropertyToID("_ParticleData");
         gpuID_updateIndArgs = Shader.PropertyToID("_UpdateIndArgs");
     }
 
-    /// <summary>
-    /// Initializes only the _NextAvailableIndices Buffer, must swap buffers after use
-    /// </summary>
     void DispatchParticleInitialize()
     {
-        //initialize free indices buffer
-        //change thread group count to div by 64
-        AttachBuffersToKernel(initKernel, isEvenFrame);
+        AttachBuffersToKernel(initKernel);
 
         int initThreadGroups = Mathf.CeilToInt(maxParticles / 64f);
         particleComputeShader.Dispatch(initKernel, initThreadGroups, 1, 1);
@@ -160,47 +115,40 @@ public class GpuParticleSystem2 : MonoBehaviour
     void EmitParticle()
     {
         //this one should only have one thead in group
-        AttachBuffersToKernel(emitKernel, isEvenFrame);
+        AttachBuffersToKernel(emitKernel);
         particleComputeShader.Dispatch(emitKernel, 1, 1, 1);
     }
 
     void DispatchParticleUpdate()
     {
-        ComputeBuffer.CopyCount(currAliveIndices, updateIndArgs, 0);
-        particleComputeShader.SetBuffer(earlyUpdateKernel, gpuID_updateIndArgs, updateIndArgs);
-        particleComputeShader.Dispatch(earlyUpdateKernel, 1, 1, 1);
+        ComputeBuffer.CopyCount(aliveIndices, updateIndArgs, 0);
 
-        AttachBuffersToKernel(updateKernel, isEvenFrame);
+        // particleComputeShader.SetBuffer(earlyUpdateKernel, gpuID_updateIndArgs, updateIndArgs);
+        // particleComputeShader.Dispatch(earlyUpdateKernel, 1, 1, 1);
+
+        //TODO remove this editor safeguard
+        int[] tempdata = new int[3];
+        updateIndArgs.GetData(tempdata);
+        if (tempdata[0] > maxParticles)
+            throw new Exception("Too many threads: " + tempdata[0]);
+        Debug.Log(tempdata[0]);
+
+        AttachBuffersToKernel(updateKernel);
         particleComputeShader.DispatchIndirect(updateKernel, updateIndArgs);
     }
 
-    void DebugVisualize()
+    void AttachBuffersToKernel(int kernel)
     {
-        throw new NotImplementedException();
+        particleComputeShader.SetBuffer(kernel, gpuID_availableIndices, availableIndices);
+        particleComputeShader.SetBuffer(kernel, gpuID_aliveIndices, aliveIndices);
+        particleComputeShader.SetBuffer(kernel, gpuID_nextAliveIndices, nextAliveIndices);
+        particleComputeShader.SetBuffer(kernel, gpuID_particleData, particleData);
     }
 
-    void UpdateCurrNextBuffers()
+    void UpdateSwapBuffers(bool isEvenFrame)
     {
-        // currAvailableIndices = isEvenFrame ? availableIndices1 : availableIndices2;
-        // nextAvailableIndices = isEvenFrame ? availableIndices2 : availableIndices1;
-        // currAliveIndices = isEvenFrame ? aliveIndices1 : aliveindices2;
-        // nextAliveIndices = isEvenFrame ? aliveindices2 : aliveIndices1;
-        // currData = isEvenFrame ? particleData1 : particleData2;
-        // nextData = isEvenFrame ? particleData2 : particleData1;
-
-        currAvailableIndices = availableIndices1;
-        currAliveIndices = aliveIndices1;
-        currData = particleData1;
-    }
-
-    void AttachBuffersToKernel(int kernel, bool isEvenFrame)
-    {
-        particleComputeShader.SetBuffer(kernel, gpuID_currAvailableIndices, currAvailableIndices);
-        // particleComputeShader.SetBuffer(kernel, gpuID_nextAvailableIndices, nextAvailableIndices);
-        particleComputeShader.SetBuffer(kernel, gpuID_currAliveIndices, currAliveIndices);
-        // particleComputeShader.SetBuffer(kernel, gpuID_nextAliveIndices, nextAliveIndices);
-        particleComputeShader.SetBuffer(kernel, gpuID_currData, currData);
-        // particleComputeShader.SetBuffer(kernel, gpuID_nextData, nextData);
+        aliveIndices = isEvenFrame ? aliveIndices1 : aliveIndices2;
+        nextAliveIndices = isEvenFrame ? aliveIndices2 : aliveIndices1;
     }
 
     private List<ComputeBuffer> GetAllComputeBuffers()
@@ -219,4 +167,77 @@ public class GpuParticleSystem2 : MonoBehaviour
             computeBuffer.Dispose();
         }
     }
+
+    #region  Debug Visualisation
+
+    [SerializeField]
+    Mesh debugMesh;
+
+    Shader debugShader;
+
+    Material debugMaterial;
+
+    ComputeBuffer debugMeshTriangles;
+    ComputeBuffer debugMeshVertexPositions;
+    ComputeBuffer debugShaderBufferWithArgs;
+
+    void DebugVisualizeInit()
+    {
+        debugShader = Shader.Find("Hidden/ParticleDebug");
+
+        debugMaterial = new Material(debugShader);
+
+        int[] inputMeshTriangles = debugMesh.triangles;
+        debugMeshTriangles = new ComputeBuffer(inputMeshTriangles.Length, sizeof(int))
+        {
+            name = "debugMeshTriangles"
+        };
+        debugMeshTriangles.SetData(inputMeshTriangles);
+
+        Vector3[] inputMeshVertexPositions = debugMesh.vertices;
+        debugMeshVertexPositions = new ComputeBuffer(
+            inputMeshVertexPositions.Length,
+            sizeof(float) * 3
+        )
+        {
+            name = "debugMeshVertexPositions"
+        };
+        debugMeshVertexPositions.SetData(inputMeshVertexPositions);
+
+        debugShaderBufferWithArgs = new ComputeBuffer(
+            5,
+            sizeof(int),
+            ComputeBufferType.IndirectArguments
+        )
+        {
+            name = "debugShaderBufferWithArgs"
+        };
+        int[] bufferWithArgsData = new int[]
+        {
+            debugMeshTriangles.count, /*vertex count per instance*/
+            1, /*instance count*/
+            0, /*start vertex location*/
+            0, /*start instance location*/
+        };
+        debugShaderBufferWithArgs.SetData(bufferWithArgsData);
+    }
+
+    void DebugVisualizeUpdate()
+    {
+        ComputeBuffer.CopyCount(nextAliveIndices, debugShaderBufferWithArgs, sizeof(int));
+        debugMaterial.SetBuffer("_ParticleData", particleData);
+        debugMaterial.SetBuffer("_MeshTriangles", debugMeshTriangles);
+        debugMaterial.SetBuffer("_MeshVertexPositions", debugMeshVertexPositions);
+        debugMaterial.SetBuffer("_AliveIndices", aliveIndices);
+        // debugMaterial.SetBuffer("_ArgsBuffer", debugShaderBufferWithArgs);
+
+        Graphics.DrawProceduralIndirect(
+            debugMaterial,
+            new Bounds(Vector3.zero, Vector3.one * 1_000_000),
+            MeshTopology.Triangles,
+            debugShaderBufferWithArgs
+        );
+    }
+
+    #endregion
 }
