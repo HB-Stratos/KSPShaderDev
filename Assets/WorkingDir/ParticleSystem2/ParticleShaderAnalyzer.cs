@@ -20,6 +20,7 @@ class ParticleShaderAnalyzer : HLSLSyntaxVisitor
     {
         public int particleStructSize;
         public List<string> cpuSources;
+        public int customConstantsBufferSize;
     }
 
     public OutputData AnalyzeShader(string path)
@@ -113,6 +114,24 @@ class ParticleShaderAnalyzer : HLSLSyntaxVisitor
                     initializerNode.Expression;
 
                 outputData.cpuSources.Add(literalExpressionNode.Lexeme);
+            }
+        }
+        else if ( //TODO make this prettier and fix up include files once I know how, this code does nothing so far.
+            node.Annotations.Count != 0
+            && node.Annotations[0].Declarators.Count != 0
+            && node.Annotations[0].Declarators[0].Name == "requestedSize"
+            && node.Annotations[0].Declarators[0].Initializer.GetType()
+                == typeof(ValueInitializerNode)
+        )
+        {
+            ValueInitializerNode initializerNode = (ValueInitializerNode)
+                node.Annotations[0].Declarators[0].Initializer;
+            if (initializerNode.Expression.GetType() == typeof(LiteralExpressionNode))
+            {
+                LiteralExpressionNode literalExpressionNode = (LiteralExpressionNode)
+                    initializerNode.Expression;
+
+                outputData.customConstantsBufferSize = Int32.Parse(literalExpressionNode.Lexeme);
             }
         }
         else

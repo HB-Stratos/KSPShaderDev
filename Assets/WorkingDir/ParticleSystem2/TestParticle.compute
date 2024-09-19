@@ -5,20 +5,19 @@
 #pragma kernel _EarlyUpdate
 #pragma kernel _Update
 
+
+
+#include "../ComputeShaderLearning/WhiteNoise.cginc"
+
 //TODO lots of fixing to do
 // Available Indices must be maintained to allow for random particle lifetimes
 // Somehow data buffer coherence should be maintaned, maybe the stack-like behavior of the avaliable index buffer works here?
 // I think the index buffer wouldn't work, double-buffering the particle buffer and making it (fake) append would work.
 // need to be careful with maintaining ability to have parented particles -> ffs this might break memory coherence through appending
 
-
-// do not make this overly high, it determines shader size
-// //TODO this should really be dynamic, not user defined in source
-// int maxParticles = 10000;
-
 //Only some specific values can be gathered this way, check documentation (that doesn't exist rn)
-float _DeltaTime < string CpuSource = "Time.deltaTime" ; > ; //Really we should not use Time.DeltaTime if this is e.g. updated in fixed update
-int rendertype < string RenderType = "Triangles"; > ;
+uniform float _DeltaTime < string CpuSource = "Time.deltaTime" ; > ; //Really we should not use Time.DeltaTime if this is e.g. updated in fixed update
+uniform int rendertype < string RenderType = "Triangles"; > ;
 
 struct Particle
 {
@@ -29,18 +28,8 @@ struct Particle
     int parent;
 };
 
-#define UINT_MAX 4294967295
-
-RWStructuredBuffer<int> _AvailableIndices;
-
-ConsumeStructuredBuffer<int> _AliveIndices;
-AppendStructuredBuffer<int> _NextAliveIndices;
-
-RWStructuredBuffer<Particle> _ParticleData;
-uint _ParticleDataSize;
-uint _ParticleDataStride;
-
-RWStructuredBuffer<int> _UpdateIndArgs;
+#define PARTICLE_MIDINCLUDE
+#include "ParticleInclude.hlsl"
 
 // struct PersistentGlobalData
 // {
@@ -61,9 +50,9 @@ struct Render
 Particle Emit()
 {
     Particle p;
-    p.life = 10;
-    p.position = float3(0, 0, 0);
-    p.velocity = float3(0, 0, 1);
+    p.life = 10 - rand1dTo1d(GetRandomSeed()) * 10;
+    p.position = float3(0, rand1dTo1d(GetRandomSeed()) * 10, 0);
+    p.velocity = float3(0, 0, 10);
     p.index = -1;
     p.parent = -1;
     return p;
@@ -92,86 +81,15 @@ bool Update(inout Particle p)
     tri.pos1 = float3(0, 1, 0);
     tri.pos2 = float3(0, 0, 1);
     AddRender(tri);
-    return true; //return false to kill particle
+    return p.life > 0 ? true : false ; //return false to kill particle
 
 }
 
-
-// int IncrementDataCounter()
-// {
-//     _ParticleDataInUseCount++;
-//     return _ParticleData.IncrementCounter();
-// }
-// int DecrementDataCounter()
-// {
-//     _ParticleDataInUseCount--;
-//     return _ParticleData.DecrementCounter();
-// }
+#define PARTICLE_POSTINCLUDE
+#include "ParticleInclude.hlsl"
 
 
 
-uint GetNewParticleIndex()
-{
-    uint availableIndicesIndex = _AvailableIndices.DecrementCounter();
-    // if (availableIndicesIndex > _ParticleDataSize) return UINT_MAX;
-    
-    uint newParticleIndex = _AvailableIndices[availableIndicesIndex];
-    _NextAliveIndices.Append(newParticleIndex);
-    return newParticleIndex;
-}
-
-void _Emit(Particle p)
-{
-    uint newParticleIndex = GetNewParticleIndex();
-    // if (newParticleIndex == UINT_MAX) return;
-    
-    //new particle index can also be used for parenting, would require multiple emits in the same call though
-    p.index = newParticleIndex;
-    _ParticleData[newParticleIndex] = p;
-}
-
-//TODO kinda ugly to have only one thread in group, fix maybe?
-//TODO make particle parenting possible
-[numthreads(1, 1, 1)]
-void _CpuEmit()
-{
-    _Emit(Emit());
-}
-
-//TODO this would ideally be (64, 1, 1), but this is not possible with the current copy count.
-//TODO WARNING if this was 64 threads I might run too many threads and consume more data than present in the buffer
-//TODO ffs this implementation of reading and writing may cause a race condition when accessing parents
-[numthreads(1, 1, 1)]
-void _Update(uint3 id : SV_DispatchThreadID)
-{
-    //TODO call Update() with particle from struct, maybe handle emitting itself again?
-    uint processedParticleIndex = _AliveIndices.Consume();
-    Particle p = _ParticleData[processedParticleIndex];
-    if (Update(p)) _NextAliveIndices.Append(processedParticleIndex);
-    _ParticleData[processedParticleIndex] = p;
-}
-
-[numthreads(1, 1, 1)]
-void _EarlyUpdate()
-{
-    // _ParticleDataInUseCount = _ParticleData.IncrementCounter();
-    // _ParticleData.DecrementCounter();
-    uint threadGroupSize = 64;
-    _UpdateIndArgs[0] = (_UpdateIndArgs[0] + (threadGroupSize - 1)) / threadGroupSize;
-}
-
-[numthreads(64, 1, 1)] //Initialize the available indices buffer
-void _Init(uint3 id : SV_DispatchThreadID)
-{
-    
-    if (id.x == 0)
-    {
-        _ParticleData.GetDimensions(_ParticleDataSize, _ParticleDataStride);
-    }
-    
-    _AvailableIndices[id.x] = id.x; //TODO WARNING out of bounds write, probably fine only in dx11
-
-}
 
 
 

@@ -696,6 +696,7 @@ MonoBehaviour:
   maxParticles: 10000
   particleComputeShader: {fileID: 7200000, guid: ac968e0cb06765d498d00175940ef571,
     type: 3}
+  debugMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
 --- !u!4 &1382540415
 Transform:
   m_ObjectHideFlags: 0
@@ -832,7 +833,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: eaf8cf041aeb5d746bf8c5fdc4e48614, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  KeepSceneViewActive: 1
+  KeepSceneViewActive: 0
 --- !u!4 &1506022380
 Transform:
   m_ObjectHideFlags: 0

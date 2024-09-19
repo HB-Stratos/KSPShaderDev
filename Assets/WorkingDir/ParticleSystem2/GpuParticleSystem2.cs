@@ -24,6 +24,7 @@ public class GpuParticleSystem2 : MonoBehaviour
     int gpuID_nextAliveIndices;
     int gpuID_particleData;
     int gpuID_updateIndArgs;
+    int gpuID_customConstants;
 
     ComputeBuffer availableIndices;
     ComputeBuffer aliveIndices;
@@ -31,6 +32,7 @@ public class GpuParticleSystem2 : MonoBehaviour
     ComputeBuffer aliveIndices1;
     ComputeBuffer aliveIndices2;
     ComputeBuffer particleData;
+    ComputeBuffer customConstants;
 
     bool isEvenFrame = false;
 
@@ -60,6 +62,7 @@ public class GpuParticleSystem2 : MonoBehaviour
         isEvenFrame = !isEvenFrame;
         UpdateSwapBuffers(isEvenFrame);
 
+        // DispatchParticleInitialize();
         //Emit particle and consume free indices buffer
         EmitParticle();
         //Dispatch update kernel indirect
@@ -72,17 +75,23 @@ public class GpuParticleSystem2 : MonoBehaviour
     void InitializeBuffers()
     {
         // csharpier-ignore-start
-        availableIndices = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Counter) {name = "availableIndices"};
-        aliveIndices1 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Counter) {name = "aliveIndices1"};
-        aliveIndices2 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Counter) {name = "aliveIndices2"};
+        availableIndices = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Counter) { name = "availableIndices" };
+        aliveIndices1 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Counter) { name = "aliveIndices1" };
+        aliveIndices2 = new ComputeBuffer(maxParticles, sizeof(uint), ComputeBufferType.Counter) { name = "aliveIndices2" };
 
 
         availableIndices.SetCounterValue((uint)maxParticles);
 
         ParticleShaderAnalyzer.OutputData particleShaderData = new ParticleShaderAnalyzer().AnalyzeShader("Assets/WorkingDir/ParticleSystem2/TestParticle.compute");
-        particleData = new ComputeBuffer(maxParticles, particleShaderData.particleStructSize, ComputeBufferType.Default ) {name = "particleData1"};
-        updateIndArgs = new ComputeBuffer(3, sizeof(int), ComputeBufferType.IndirectArguments) {name = "updateIndArgs"};
+        //Particle Data is a counter buffer, but we're only using the counter to increment a random seed
+        particleData = new ComputeBuffer(maxParticles, particleShaderData.particleStructSize, ComputeBufferType.Counter ) { name = "particleData" };
+        // particleComputeShader.SetInt("_ParticleDataSize", maxParticles);
+        // particleComputeShader.SetInt("_ParticleDataStride", particleShaderData.particleStructSize);
+
+        updateIndArgs = new ComputeBuffer(3, sizeof(int), ComputeBufferType.IndirectArguments) { name = "updateIndArgs" };
         int[] bufferWithArgsData = new int[]{0 /*x thread count*/,  1 /*y thread count*/,  1 /*z thread count*/  };
+
+        customConstants = new ComputeBuffer(3, sizeof(int), ComputeBufferType.Default) { name = "customConstants" };
         // csharpier-ignore-end
         updateIndArgs.SetData(bufferWithArgsData);
     }
@@ -102,6 +111,7 @@ public class GpuParticleSystem2 : MonoBehaviour
         gpuID_nextAliveIndices = Shader.PropertyToID("_NextAliveIndices");
         gpuID_particleData = Shader.PropertyToID("_ParticleData");
         gpuID_updateIndArgs = Shader.PropertyToID("_UpdateIndArgs");
+        gpuID_customConstants = Shader.PropertyToID("_CustomConstants");
     }
 
     void DispatchParticleInitialize()
@@ -123,13 +133,14 @@ public class GpuParticleSystem2 : MonoBehaviour
     {
         ComputeBuffer.CopyCount(aliveIndices, updateIndArgs, 0);
 
-        // particleComputeShader.SetBuffer(earlyUpdateKernel, gpuID_updateIndArgs, updateIndArgs);
-        // particleComputeShader.Dispatch(earlyUpdateKernel, 1, 1, 1);
+        particleComputeShader.SetBuffer(earlyUpdateKernel, gpuID_updateIndArgs, updateIndArgs);
+        AttachBuffersToKernel(earlyUpdateKernel);
+        particleComputeShader.Dispatch(earlyUpdateKernel, 1, 1, 1);
 
         //TODO remove this editor safeguard
         int[] tempdata = new int[3];
         updateIndArgs.GetData(tempdata);
-        if (tempdata[0] > maxParticles)
+        if (tempdata[0] * 64 > maxParticles)
             throw new Exception("Too many threads: " + tempdata[0]);
         Debug.Log(tempdata[0]);
 
@@ -143,6 +154,7 @@ public class GpuParticleSystem2 : MonoBehaviour
         particleComputeShader.SetBuffer(kernel, gpuID_aliveIndices, aliveIndices);
         particleComputeShader.SetBuffer(kernel, gpuID_nextAliveIndices, nextAliveIndices);
         particleComputeShader.SetBuffer(kernel, gpuID_particleData, particleData);
+        particleComputeShader.SetBuffer(kernel, gpuID_customConstants, customConstants);
     }
 
     void UpdateSwapBuffers(bool isEvenFrame)
