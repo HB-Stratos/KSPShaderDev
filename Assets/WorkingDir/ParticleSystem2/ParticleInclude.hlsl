@@ -1,4 +1,4 @@
-﻿#define UINT_MAX 4294967295
+﻿#define UINT_MAX 4294967295u
 
 #if defined( PARTICLE_MIDINCLUDE )
 #undef PARTICLE_MIDINCLUDE
@@ -14,12 +14,22 @@ AppendStructuredBuffer<int> _NextAliveIndices;
 
 
 RWStructuredBuffer<Particle> _ParticleData;
+#ifdef PARTICLE_USE_PARENTING
+RWStructuredBuffer<Particle> _NextParticleData;
+#endif
 uniform uint _ParticleDataSize;
 uniform uint _ParticleDataStride;
 
 RWStructuredBuffer<int> _UpdateIndArgs;
 
-RWStructuredBuffer<uint> _CustomConstants < int requestedSize = 3 ; >;
+struct CustomData{
+    uint _ParticleDataSize;
+    uint _ParticleDataStride;
+    uint _CurrentParticleCount;
+    uint _AvailableIndex;
+};
+
+RWStructuredBuffer<CustomData> _CustomData < int requestedSize = 4 ; >;
 /// [0] -> _ParticleDataSize
 /// [1] -> _ParticleDataStride
 /// [2] -> _CurrentParticleCount
@@ -29,20 +39,8 @@ uint GetRandomSeed(){
     return _ParticleData.IncrementCounter();
 }
 
-#elif defined ( PARTICLE_POSTINCLUDE )
-#undef PARTICLE_POSTINCLUDE
-
-// int IncrementDataCounter()
-// {
-//     _ParticleDataInUseCount++;
-//     return _ParticleData.IncrementCounter();
-// }
-// int DecrementDataCounter()
-// {
-//     _ParticleDataInUseCount--;
-//     return _ParticleData.DecrementCounter();
-// }
-
+bool getParent(Particle child, out Particle parent){
+}
 
 
 uint GetNewParticleIndex()
@@ -58,12 +56,20 @@ uint GetNewParticleIndex()
 void _Emit(Particle p)
 {
     uint newParticleIndex = GetNewParticleIndex();
-    // if (newParticleIndex == UINT_MAX) return;
+    if (newParticleIndex == UINT_MAX) return;
     
     //new particle index can also be used for parenting, would require multiple emits in the same call though
     p.index = newParticleIndex;
+    #ifdef PARTICLE_USE_PARENTING
+    _NextParticleData[newParticleIndex] = p;
+    #else
     _ParticleData[newParticleIndex] = p;
+    #endif
 }
+
+
+#elif defined ( PARTICLE_POSTINCLUDE )
+#undef PARTICLE_POSTINCLUDE
 
 //TODO kinda ugly to have only one thread in group, fix maybe?
 //TODO make particle parenting possible
@@ -80,8 +86,7 @@ void _CpuEmit()
 [numthreads(64, 1, 1)]
 void _Update(uint3 id : SV_DispatchThreadID)
 {
-    //TODO 64 threads currently breaks because the check needs to go for current particle count
-    if (id.x >= _CustomConstants[2]) return;
+    if (id.x >= _CustomData[0]._CurrentParticleCount) return;
 
     uint processedParticleIndex = _AliveIndices.Consume();
     Particle p = _ParticleData[processedParticleIndex];
@@ -91,18 +96,23 @@ void _Update(uint3 id : SV_DispatchThreadID)
         _AvailableIndices[deadParticleWriteIndex] = processedParticleIndex;
         return;
     }
+
+    #ifdef PARTICLE_USE_PARENTING
+    _NextParticleData[processedParticleIndex] = p;
+    #else
     _ParticleData[processedParticleIndex] = p;
+    #endif
 }
 
 [numthreads(1, 1, 1)]
 void _EarlyUpdate()
 {
-    _CustomConstants[2] = _UpdateIndArgs[0]; 
+    _CustomData[0]._CurrentParticleCount = _UpdateIndArgs[0]; 
     uint threadGroupSize = 64;
     _UpdateIndArgs[0] = (_UpdateIndArgs[0] + (threadGroupSize - 1)) / threadGroupSize;
 }
 
-[numthreads(64, 1, 1)] //Initialize the available indices buffer
+[numthreads(64, 1, 1)] //Initialize the available indices buffer 
 void _Init(uint3 id : SV_DispatchThreadID)
 {
     
@@ -111,8 +121,8 @@ void _Init(uint3 id : SV_DispatchThreadID)
         uint numStructs;
         uint stride;
         _ParticleData.GetDimensions(numStructs, stride);
-        _CustomConstants[0] = numStructs;
-        _CustomConstants[1] = stride;
+        _CustomData[0]._ParticleDataSize = numStructs;
+        _CustomData[0]._ParticleDataStride = stride;
     }
     
     _AvailableIndices[id.x] = id.x; //TODO WARNING out of bounds write, probably fine only in dx11

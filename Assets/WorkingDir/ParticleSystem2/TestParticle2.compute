@@ -15,14 +15,12 @@ uniform int rendertype < string RenderType = "Triangles"; > ;
 
 //TODO all of these need to be added to the shader parser and handled.
 #define PARTICLE_USE_PARENTING
-#define PARTICLE_RUN_EMIT_PER_FRAME
-//#define PARTICLE_RUN_EMIT_ONCE
+//#define PARTICLE_RUN_EMIT_PER_FRAME
+#define PARTICLE_RUN_EMIT_ONCE
 
 struct Particle
 {
     float3 position; //must be first entry by convention
-    float life;
-    float3 velocity;
     int index; //index of particle in the data buffer, used for parenting
     int parent;
 };
@@ -49,9 +47,7 @@ struct Render
 Particle Emit()
 {
     Particle p;
-    p.life = 50 - rand1dTo1d(GetRandomSeed()) * 10;
-    p.position = float3(0, rand1dTo1d(GetRandomSeed()) * 10, 0);
-    p.velocity = float3(0, 0, 10);
+    p.position = float3(0, 0, 0);
     p.index = -1;
     p.parent = -1;
     return p;
@@ -71,16 +67,12 @@ void AddRender(Render tri)
 // Update is only allowed to modify data within Particle p.
 bool Update(inout Particle p)
 {
-    p.position += p.velocity * _DeltaTime;
-
-    p.life -= _DeltaTime;
-
     Render tri;
     tri.pos0 = float3(0, 0, 0);
     tri.pos1 = float3(0, 1, 0);
     tri.pos2 = float3(0, 0, 1);
     AddRender(tri);
-    return p.life > 0 ? true : false ; //return false to kill particle
+    return true; //return false to kill particle
 
 }
 
