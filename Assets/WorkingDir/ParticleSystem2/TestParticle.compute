@@ -46,15 +46,13 @@ struct Render
 //TODO figure out a way to request data from the CPU dynamically
 
 // How a new particle should look. Return a Particle.
-Particle Emit()
+void DoEmit(inout Particle p)
 {
-    Particle p;
     p.life = 50 - rand1dTo1d(GetRandomSeed()) * 10;
     p.position = float3(0, rand1dTo1d(GetRandomSeed()) * 10, 0);
     p.velocity = float3(0, 0, 10);
     p.index = -1;
     p.parent = -1;
-    return p;
 }
 
 
@@ -69,7 +67,7 @@ void AddRender(Render tri)
 // }
 
 // Update is only allowed to modify data within Particle p.
-bool Update(inout Particle p)
+bool DoUpdate(inout Particle p)
 {
     p.position += p.velocity * _DeltaTime;
 

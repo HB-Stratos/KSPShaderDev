@@ -42,6 +42,8 @@ public class GpuParticleSystem2 : MonoBehaviour
 
     void Start()
     {
+        Application.targetFrameRate = 5;
+
         if (particleComputeShader == null)
             throw new ArgumentException("No Shader assigned to script");
 
@@ -60,7 +62,7 @@ public class GpuParticleSystem2 : MonoBehaviour
 
         DebugVisualizeInit();
 
-        // EmitParticle();
+        EmitParticle();
     }
 
     void Update()
@@ -70,9 +72,13 @@ public class GpuParticleSystem2 : MonoBehaviour
 
         // DispatchParticleInitialize();
         //Emit particle and consume free indices buffer
-        EmitParticle();
+        // EmitParticle();
         //Dispatch update kernel indirect
         particleComputeShader.SetFloat("_DeltaTime", Time.deltaTime); //TEMP TESTING
+        particleComputeShader.SetFloats(
+            "_TransformLocation",
+            new float[] { transform.position.x, transform.position.y, transform.position.z }
+        );
         DispatchParticleUpdate();
         //create material and dispatch vertex shader for debug visualisation
         DebugVisualizeUpdate();
@@ -88,8 +94,8 @@ public class GpuParticleSystem2 : MonoBehaviour
 
         availableIndices.SetCounterValue((uint)maxParticles);
 
-        //TODO This should not be a file string
-        ParticleShaderAnalyzer.OutputData particleShaderData = new ParticleShaderAnalyzer().AnalyzeShader("Assets/WorkingDir/ParticleSystem2/TestParticle.compute");
+        //TODO This should not be a file string and separately an assign to the component, that's a bit silly
+        ParticleShaderAnalyzer.OutputData particleShaderData = new ParticleShaderAnalyzer().AnalyzeShader("Assets/WorkingDir/ParticleSystem2/TestParticle2.compute");
         //Particle Data is a counter buffer, but we're only using the counter to increment a random seed
         particleData1 = new ComputeBuffer(maxParticles, particleShaderData.particleStructSize, ComputeBufferType.Counter ) { name = "particleData1" };
         particleData2 = new ComputeBuffer(maxParticles, particleShaderData.particleStructSize, ComputeBufferType.Counter ) { name = "particleData2" };
@@ -139,6 +145,13 @@ public class GpuParticleSystem2 : MonoBehaviour
 
     void DispatchParticleUpdate()
     {
+        uint[] tempdata2 = new uint[4];
+        customData.GetData(tempdata2); //TODO this call should be async
+        if (tempdata2[3] > 0) //TODO hardcoded struct index is ugly, needs fix
+            Debug.LogWarning(
+                "Ran out of Buffer space for Particles, increase max particle count or decrease emission rate"
+            );
+
         ComputeBuffer.CopyCount(aliveIndices, updateIndArgs, 0);
 
         particleComputeShader.SetBuffer(earlyUpdateKernel, gpuID_updateIndArgs, updateIndArgs);
@@ -148,7 +161,7 @@ public class GpuParticleSystem2 : MonoBehaviour
         //TODO remove this editor safeguard
         int[] tempdata = new int[3];
         updateIndArgs.GetData(tempdata);
-        if (tempdata[0] * 64 - 63 > maxParticles)
+        if (tempdata[0] > Mathf.CeilToInt(maxParticles / 64f))
             throw new Exception("Too many threads: " + tempdata[0]);
         Debug.Log(tempdata[0]);
 

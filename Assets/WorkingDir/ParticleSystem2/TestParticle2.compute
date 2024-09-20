@@ -12,6 +12,7 @@
 //Only some specific values can be gathered this way, check documentation (that doesn't exist rn)
 uniform float _DeltaTime < string CpuSource = "Time.deltaTime" ; > ; //Really we should not use Time.DeltaTime if this is e.g. updated in fixed update
 uniform int rendertype < string RenderType = "Triangles"; > ;
+uniform float3 _TransformLocation < string CpuSouce = "transform.position" ; > ;
 
 //TODO all of these need to be added to the shader parser and handled.
 #define PARTICLE_USE_PARENTING
@@ -44,13 +45,15 @@ struct Render
 //TODO figure out a way to request data from the CPU dynamically
 
 // How a new particle should look. Return a Particle.
-Particle Emit()
+void DoEmit(inout Particle p)
 {
-    Particle p;
     p.position = float3(0, 0, 0);
-    p.index = -1;
     p.parent = -1;
-    return p;
+    // Particle child = p;
+    // child.parent = p.index;
+    // child.position += float3(0, 0, 1);
+    // _Emit(child);
+
 }
 
 
@@ -65,13 +68,34 @@ void AddRender(Render tri)
 // }
 
 // Update is only allowed to modify data within Particle p.
-bool Update(inout Particle p)
+bool DoUpdate(inout Particle p)
 {
-    Render tri;
-    tri.pos0 = float3(0, 0, 0);
-    tri.pos1 = float3(0, 1, 0);
-    tri.pos2 = float3(0, 0, 1);
-    AddRender(tri);
+    // Render tri;
+    // tri.pos0 = float3(0, 0, 0);
+    // tri.pos1 = float3(0, 1, 0);
+    // tri.pos2 = float3(0, 0, 1);
+    // AddRender(tri);
+
+    // Particle parent;
+    // if (GetParent(p, parent))
+    // {
+    //     float3 vecToParent = p.position - parent.position;
+    //     // if (!all(vecToParent))
+    //     // {
+    //     //     //if the distance is zero
+    //     //     p.position += float3(0, 0, 0.1);
+    //     // }
+    //     // else
+    //     // {
+    //     p.position += normalize(vecToParent) * ((dot(vecToParent, vecToParent) - 1) * 0.1 * _DeltaTime);
+    //     // }
+
+    // }
+    // else
+    // {
+    p.position = _TransformLocation;
+    // }
+
     return true; //return false to kill particle
 
 }
